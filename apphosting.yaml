@@ -1,0 +1,39 @@
+# Configuration Firebase App Hosting pour MetaPolymarket
+# Documentation: https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  # Ressources allouées
+  cpu: 1
+  memoryMiB: 512
+  maxInstances: 10
+  minInstances: 0
+  concurrency: 80
+
+env:
+  # === API Gemini (Google AI) ===
+  # Clé API pour les analyses de marché via Gemini
+  - variable: API_KEY
+    secret: gemini-api-key
+
+  # === Configuration Firebase ===
+  - variable: FIREBASE_API_KEY
+    secret: firebase-api-key
+
+  - variable: FIREBASE_AUTH_DOMAIN
+    value: metapolymarket.firebaseapp.com
+
+  - variable: FIREBASE_PROJECT_ID
+    value: metapolymarket
+
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: metapolymarket.firebasestorage.app
+
+  - variable: FIREBASE_MESSAGING_SENDER_ID
+    value: "140799832958"
+
+  - variable: FIREBASE_APP_ID
+    secret: firebase-app-id
+
+  - variable: FIREBASE_MEASUREMENT_ID
+    value: G-GHW82RVCL0
+
