@@ -3,8 +3,9 @@ import { MarketAnalysis } from '../types';
 
 // Initialize Gemini Client
 // Note: In a production app, these calls should be proxied through a backend to protect the API Key.
-// For this client-side demo, we use the process.env.API_KEY injection.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Using Vite's environment variable injection (VITE_ prefix required for client-side access)
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /**
  * Fallback simulation in case API fails or key is missing
@@ -44,6 +45,11 @@ export const analyzeMarket = async (
   outcomes: string[] = ["Yes", "No"],
   endDate?: string
 ): Promise<MarketAnalysis> => {
+
+  // If no API key configured, use fallback simulation
+  if (!ai) {
+    return fallbackSimulation(id, slug, title, marketProb, volume, imageUrl, outcomes, endDate);
+  }
 
   try {
     const outcomeA = outcomes[0];

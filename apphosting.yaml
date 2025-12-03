@@ -11,8 +11,8 @@ runConfig:
 
 env:
   # === API Gemini (Google AI) ===
-  # Clé API pour les analyses de marché via Gemini
-  - variable: API_KEY
+  # Clé API pour les analyses de marché via Gemini (préfixe VITE_ requis pour le frontend)
+  - variable: VITE_GEMINI_API_KEY
     secret: gemini-api-key
 
   # === Configuration Firebase ===
