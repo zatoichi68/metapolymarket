@@ -1,0 +1,5 @@
+{
+  "name": "MetaPolymarket",
+  "description": "A financial dashboard comparing Crowd Wisdom (Polymarket) vs Swarm AI (AI Simulation).",
+  "requestFramePermissions": []
+}
