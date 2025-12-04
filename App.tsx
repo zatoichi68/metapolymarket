@@ -3,7 +3,7 @@ import { getDailyMarkets } from './services/polymarketService';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
+  const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -69,6 +70,17 @@ const App: React.FC = () => {
   });
 
   const categories = Object.values(Category);
+
+  const handleBetClick = (url: string) => {
+    setPendingBetUrl(url);
+  };
+
+  const confirmBet = () => {
+    if (pendingBetUrl) {
+      window.open(pendingBetUrl, '_blank', 'noopener,noreferrer');
+      setPendingBetUrl(null);
+    }
+  };
   
   const timeFilters = [
     { id: 'all', label: 'Any Time' },
@@ -227,6 +239,7 @@ const App: React.FC = () => {
                   key={market.id} 
                   market={market} 
                   onAnalyze={setSelectedMarket}
+                  onBet={handleBetClick}
                 />
               ))
             ) : (
@@ -244,7 +257,8 @@ const App: React.FC = () => {
         <MarketDetailModal 
             market={selectedMarket} 
             isOpen={!!selectedMarket} 
-            onClose={() => setSelectedMarket(null)} 
+            onClose={() => setSelectedMarket(null)}
+            onBet={handleBetClick}
         />
 
         {/* How It Works Modal */}
@@ -292,6 +306,61 @@ const App: React.FC = () => {
                     <strong className="text-slate-300">⚠️ Disclaimer:</strong> This tool is for informational purposes only. AI predictions are not financial advice. Always do your own research before placing any bets.
                   </p>
                 </div>
+              </div>
+              
+            </div>
+          </div>
+        )}
+
+        {/* Bet Disclaimer Modal */}
+        {pendingBetUrl && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setPendingBetUrl(null)} />
+            <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+              
+              <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <AlertTriangle className="text-amber-400" size={24} />
+                  Before You Bet
+                </h2>
+                <button onClick={() => setPendingBetUrl(null)} className="text-slate-500 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <p className="text-slate-300">
+                  You are about to leave MetaPolymarket and go to <strong className="text-white">Polymarket</strong> to place a bet.
+                </p>
+                
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-2">
+                  <p className="text-amber-300 text-sm font-medium">⚠️ Important Disclaimer:</p>
+                  <ul className="text-slate-400 text-sm space-y-1">
+                    <li>• AI predictions are <strong className="text-slate-300">not financial advice</strong></li>
+                    <li>• Past performance does not guarantee future results</li>
+                    <li>• Only bet what you can afford to lose</li>
+                    <li>• Prediction markets involve significant risk</li>
+                  </ul>
+                </div>
+                
+                <p className="text-slate-500 text-xs">
+                  By continuing, you acknowledge that you understand the risks involved in prediction market trading.
+                </p>
+              </div>
+              
+              <div className="p-6 border-t border-slate-800 flex gap-3">
+                <button 
+                  onClick={() => setPendingBetUrl(null)}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmBet}
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
+                >
+                  Continue to Polymarket <ExternalLink size={16} />
+                </button>
               </div>
               
             </div>

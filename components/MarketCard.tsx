@@ -5,9 +5,10 @@ import { ArrowUpRight, Gift, Bookmark, Sparkles, ExternalLink, BrainCircuit } fr
 interface MarketCardProps {
   market: MarketAnalysis;
   onAnalyze: (market: MarketAnalysis) => void;
+  onBet: (url: string) => void;
 }
 
-export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze }) => {
+export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet }) => {
   const outcomeA = market.outcomes[0] || "Yes";
   const outcomeB = market.outcomes[1] || "No";
   
@@ -80,14 +81,12 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze }) => 
             </div>
 
             {/* BET Button */}
-            <a 
-              href={`https://polymarket.com/event/${market.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button 
+              onClick={(e) => { e.preventDefault(); onBet(`https://polymarket.com/event/${market.slug}`); }}
               className={`h-9 px-5 rounded-md text-xs font-bold uppercase tracking-wide border transition-all active:scale-95 flex items-center justify-center ${buttonClass}`}
             >
                 BET
-            </a>
+            </button>
         </div>
       </div>
     );
