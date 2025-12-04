@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 // Providing a key (e.g. via headers) can sometimes help with rate limits, 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
-const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=50&active=true&closed=false&order=volume24hr&ascending=false';
+const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_URL = `${PROXY_URL}${encodeURIComponent(BASE_API_URL)}`;
 
