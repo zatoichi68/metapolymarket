@@ -9,9 +9,13 @@ function apiPlugin(): Plugin {
   
   return {
     name: 'api-plugin',
-    configResolved() {
-      // Clé API OpenRouter pour dev local - en prod, utilise le secret Firebase
-      geminiApiKey = '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';
+    configResolved(config) {
+      // Charger la clé depuis .env (OPENROUTER_API_KEY) - jamais hardcodée !
+      const env = loadEnv(config.mode, process.cwd(), '');
+      geminiApiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+      if (!geminiApiKey) {
+        console.warn('⚠️  OPENROUTER_API_KEY not found in .env - AI analysis will fail');
+      }
     },
     configureServer(server) {
       server.middlewares.use('/api/analyze', async (req, res) => {
