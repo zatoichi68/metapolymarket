@@ -84,7 +84,7 @@ Respond ONLY with valid JSON, no markdown.`;
 }
 
 /**
- * Fetch and analyze all markets
+ * Fetch and analyze all markets with parallel processing
  */
 async function fetchAndAnalyzeMarkets(apiKey) {
   console.log('Fetching markets from Polymarket...');
@@ -97,10 +97,9 @@ async function fetchAndAnalyzeMarkets(apiKey) {
   const events = await response.json();
   console.log(`Fetched ${events.length} events`);
 
-  const analyzedMarkets = [];
-  let successCount = 0;
-  let errorCount = 0;
-
+  // Prepare all valid markets first
+  const marketsToAnalyze = [];
+  
   for (const event of events) {
     const market = event.markets?.[0];
     if (!market || !market.outcomePrices) continue;
@@ -127,46 +126,78 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         outcomes = [market.groupItemTitle, "Other"];
       }
 
-      console.log(`Analyzing: ${event.title}`);
-      
-      const analysis = await analyzeMarket(
-        event.title,
-        outcomes,
-        prob,
-        parseFloat(market.volume || "0"),
-        apiKey
-      );
-
-      const aiProb = analysis.aiProbability ?? prob;
-      const prediction = analysis.prediction ?? outcomes[0];
-
-      analyzedMarkets.push({
-        id: event.id,
-        slug: event.slug || "",
-        title: event.title,
-        category: analysis.category ?? "Other",
-        imageUrl: event.image,
-        marketProb: prob,
-        aiProb,
-        edge: aiProb - prob,
-        reasoning: analysis.reasoning ?? "Analysis based on market trends.",
-        volume: parseFloat(market.volume || "0"),
-        outcomes,
-        prediction,
-        confidence: analysis.confidence ?? 5,
-        kellyPercentage: analysis.kellyPercentage ?? 0,
-        riskFactor: analysis.riskFactor ?? "Market volatility",
-        endDate: event.endDate
-      });
-
-      successCount++;
-      
-      // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 500));
-
+      marketsToAnalyze.push({ event, market, prob, outcomes });
     } catch (error) {
-      console.error(`Error analyzing ${event.title}:`, error.message);
-      errorCount++;
+      console.error(`Error preparing ${event.title}:`, error.message);
+    }
+  }
+
+  console.log(`Prepared ${marketsToAnalyze.length} markets for analysis`);
+
+  // Process in parallel batches of 10
+  const BATCH_SIZE = 10;
+  const analyzedMarkets = [];
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < marketsToAnalyze.length; i += BATCH_SIZE) {
+    const batch = marketsToAnalyze.slice(i, i + BATCH_SIZE);
+    console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(marketsToAnalyze.length / BATCH_SIZE)} (${batch.length} markets)`);
+
+    const batchPromises = batch.map(async ({ event, market, prob, outcomes }) => {
+      try {
+        const analysis = await analyzeMarket(
+          event.title,
+          outcomes,
+          prob,
+          parseFloat(market.volume || "0"),
+          apiKey
+        );
+
+        const aiProb = analysis.aiProbability ?? prob;
+        const prediction = analysis.prediction ?? outcomes[0];
+
+        return {
+          success: true,
+          data: {
+            id: event.id,
+            slug: event.slug || "",
+            title: event.title,
+            category: analysis.category ?? "Other",
+            imageUrl: event.image,
+            marketProb: prob,
+            aiProb,
+            edge: aiProb - prob,
+            reasoning: analysis.reasoning ?? "Analysis based on market trends.",
+            volume: parseFloat(market.volume || "0"),
+            outcomes,
+            prediction,
+            confidence: analysis.confidence ?? 5,
+            kellyPercentage: analysis.kellyPercentage ?? 0,
+            riskFactor: analysis.riskFactor ?? "Market volatility",
+            endDate: event.endDate
+          }
+        };
+      } catch (error) {
+        console.error(`Error analyzing ${event.title}:`, error.message);
+        return { success: false, title: event.title };
+      }
+    });
+
+    const results = await Promise.all(batchPromises);
+    
+    for (const result of results) {
+      if (result.success) {
+        analyzedMarkets.push(result.data);
+        successCount++;
+      } else {
+        errorCount++;
+      }
+    }
+
+    // Small delay between batches to avoid rate limiting
+    if (i + BATCH_SIZE < marketsToAnalyze.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
