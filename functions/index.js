@@ -8,8 +8,8 @@ import { defineSecret } from 'firebase-functions/params';
 initializeApp();
 const db = getFirestore();
 
-// Define the OpenRouter API key secret (uses the same secret as App Hosting)
-const openrouterApiKey = defineSecret('openrouter-api-key');
+// Define the OpenRouter API key secret
+const openrouterApiKey = defineSecret('OPENROUTER_API_KEY');
 
 const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
 
