@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { getDailyMarkets } from './services/polymarketService';
+import { getDailyMarkets, getHourlyMarkets } from './services/polymarketService';
 import { savePredictionsToHistory } from './services/historyService';
 import { PredictionHistory } from './components/PredictionHistory';
 import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
+  const [hourlyMarkets, setHourlyMarkets] = useState<MarketAnalysis[]>([]);
+  const [hourlyTimestamp, setHourlyTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(Category.ALL);
@@ -22,18 +24,41 @@ const App: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('edge'); // 'edge', 'volume', 'kelly', 'date'
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [showAlerts, setShowAlerts] = useState<boolean>(false);
+  const [isPremium, setIsPremium] = useState<boolean>(() => {
+    // Persist premium status in localStorage
+    return localStorage.getItem('metapolymarket_premium') === 'true';
+  });
+  const [dataSource, setDataSource] = useState<'daily' | 'hourly'>('daily');
+
+  const togglePremium = () => {
+    const newValue = !isPremium;
+    setIsPremium(newValue);
+    localStorage.setItem('metapolymarket_premium', String(newValue));
+    if (!newValue) {
+      setDataSource('daily');
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // getDailyMarkets handles caching (Firebase) logic internally
-      const data = await getDailyMarkets();
-      setMarkets(data);
+      // Load daily markets (always)
+      const dailyData = await getDailyMarkets();
+      setMarkets(dailyData);
       
       // Save to prediction history
-      if (data.length > 0) {
-        savePredictionsToHistory(data).catch(console.error);
+      if (dailyData.length > 0) {
+        savePredictionsToHistory(dailyData).catch(console.error);
+      }
+
+      // Load hourly markets if premium
+      if (isPremium) {
+        const hourlyData = await getHourlyMarkets();
+        if (hourlyData) {
+          setHourlyMarkets(hourlyData.markets);
+          setHourlyTimestamp(hourlyData.timestamp);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -46,9 +71,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [isPremium]);
 
-  const filteredMarkets = markets.filter(m => {
+  // Use hourly data if premium and selected, otherwise daily
+  const activeMarkets = (isPremium && dataSource === 'hourly' && hourlyMarkets.length > 0) 
+    ? hourlyMarkets 
+    : markets;
+
+  const filteredMarkets = activeMarkets.filter(m => {
     // Search Filter
     const matchesSearch = searchQuery === '' 
       ? true 
@@ -142,16 +172,30 @@ const App: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+               {/* Premium Toggle */}
+               <button 
+                onClick={togglePremium}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  isPremium 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-700'
+                }`}
+                title={isPremium ? "Premium Active" : "Activate Premium"}
+               >
+                 <Crown size={16} className={isPremium ? "text-white" : "text-amber-400"} />
+                 <span className="hidden sm:inline">Premium</span>
+               </button>
+
                {/* Alerts Button with Badge */}
                <button 
                 onClick={() => setShowAlerts(true)}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                >
-                 <Flame size={16} className={getHighEdgeMarkets(markets).length > 0 ? "text-orange-400" : ""} />
+                 <Flame size={16} className={getHighEdgeMarkets(activeMarkets).length > 0 ? "text-orange-400" : ""} />
                  <span className="hidden sm:inline">Alerts</span>
-                 {getHighEdgeMarkets(markets).length > 0 && (
+                 {getHighEdgeMarkets(activeMarkets).length > 0 && (
                    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
-                     {getHighEdgeMarkets(markets).length}
+                     {getHighEdgeMarkets(activeMarkets).length}
                    </span>
                  )}
                </button>
@@ -192,6 +236,54 @@ const App: React.FC = () => {
             Detect arbitrage opportunities where AI disagrees with the Polymarket prediction market.
           </p>
         </div>
+
+        {/* Premium Data Source Toggle */}
+        {isPremium && (
+          <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Sparkles className="text-amber-400" size={20} />
+                <div>
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    Premium Data Access
+                    <span className="text-xs bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE</span>
+                  </h3>
+                  <p className="text-slate-400 text-sm">
+                    {hourlyTimestamp 
+                      ? `Last hourly update: ${new Date(hourlyTimestamp).toLocaleString()}`
+                      : 'Hourly updates available soon'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1">
+                <button
+                  onClick={() => setDataSource('daily')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    dataSource === 'daily'
+                      ? 'bg-slate-700 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Daily (6AM UTC)
+                </button>
+                <button
+                  onClick={() => setDataSource('hourly')}
+                  disabled={hourlyMarkets.length === 0}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    dataSource === 'hourly'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                      : hourlyMarkets.length === 0 
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Clock size={14} />
+                  Hourly
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="relative mb-4">
@@ -358,7 +450,7 @@ const App: React.FC = () => {
         <MarketDetailModal 
             market={selectedMarket} 
             isOpen={!!selectedMarket} 
-            onClose={() => setSelectedMarket(null)}
+            onClose={() => setSelectedMarket(null)} 
             onBet={handleBetClick}
         />
 
@@ -370,7 +462,7 @@ const App: React.FC = () => {
         <EdgeAlerts 
             isOpen={showAlerts} 
             onClose={() => setShowAlerts(false)}
-            markets={markets}
+            markets={activeMarkets}
             onMarketClick={setSelectedMarket}
             onBet={handleBetClick}
         />

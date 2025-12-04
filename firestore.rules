@@ -33,6 +33,24 @@ service cloud.firestore {
       
       allow delete: if false;
     }
+
+    // Collection hourly_picks - Mises à jour horaires (Premium)
+    match /hourly_picks/{hourKey} {
+      // Lecture autorisée pour tous (le filtrage premium se fait côté client)
+      allow read: if true;
+      
+      // Écriture autorisée pour créer les analyses horaires
+      allow create: if isValidHourKey(hourKey)
+                    && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt'])
+                    && request.resource.data.hour == hourKey
+                    && request.resource.data.markets is list;
+      
+      // Mise à jour autorisée (rafraîchissement)
+      allow update: if isValidHourKey(hourKey)
+                    && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt']);
+      
+      allow delete: if false;
+    }
     
     // Bloquer tout le reste
     match /{document=**} {
@@ -43,6 +61,11 @@ service cloud.firestore {
   // Fonction pour valider le format de date YYYY-MM-DD
   function isValidDateKey(key) {
     return key.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+  }
+
+  // Fonction pour valider le format horaire YYYY-MM-DD-HH
+  function isValidHourKey(key) {
+    return key.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}$');
   }
 }
 
