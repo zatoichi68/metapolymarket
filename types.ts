@@ -28,8 +28,9 @@ export interface MarketAnalysis {
   volume: number;
   outcomes: string[];
   prediction: string; // The specific outcome the AI thinks is most likely
-  confidence: number; // The probability of that prediction (0.5 - 1.0)
+  confidence: number; // Meta-Oracle confidence level (1-10)
   kellyPercentage: number; // Kelly criterion: optimal bet size as % of bankroll
+  riskFactor: string; // Principal risk factor that could invalidate the prediction
   endDate?: string;
 }
 

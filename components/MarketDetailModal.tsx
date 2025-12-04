@@ -58,7 +58,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
                         <div className="text-xl font-bold text-white flex items-center gap-2">
                             {market.prediction}
                             <span className="text-sm font-normal text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
-                                {Math.round(market.confidence * 100)}% Confidence
+                                {market.confidence}/10 Confidence
                             </span>
                         </div>
                     </div>
@@ -133,6 +133,19 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
                 </div>
                 <p className="text-xs text-amber-300/60 mt-3">
                   Based on the edge detected, this is the mathematically optimal percentage of your capital to allocate to this bet for maximum long-term growth.
+                </p>
+              </div>
+            )}
+
+            {/* Risk Factor */}
+            {market.riskFactor && (
+              <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
+                <h3 className="text-sm font-bold text-red-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    ⚠️ Facteur de Risque
+                </h3>
+                <p className="text-slate-300 text-sm">
+                    {market.riskFactor}
                 </p>
               </div>
             )}

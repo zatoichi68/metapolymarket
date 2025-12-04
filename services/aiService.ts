@@ -31,7 +31,8 @@ export const analyzeMarket = async (
   const reasoning = result.reasoning ?? "Analysis based on market trends.";
   const category = result.category ?? "Other";
   const kellyPercentage = result.kellyPercentage ?? 0;
-  const confidence = prediction === outcomes[0] ? aiProb : (1 - aiProb);
+  const confidence = result.confidence ?? 5; // Meta-Oracle confidence 1-10
+  const riskFactor = result.riskFactor ?? "Market volatility";
 
   return {
     id,
@@ -48,6 +49,7 @@ export const analyzeMarket = async (
     prediction,
     confidence,
     kellyPercentage,
+    riskFactor,
     endDate
   };
 };

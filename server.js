@@ -33,31 +33,36 @@ app.post('/api/analyze', async (req, res) => {
     const outcomeB = outcomes[1] || "Other";
     const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-    const prompt = `You are a Superforecaster AI analyzing a prediction market.
+    
+    const prompt = `Role: Tu es le "Meta-Oracle", une IA d'élite spécialisée dans la prédiction probabiliste (Superforecasting) inspirée par les méthodes de Philip Tetlock et Nate Silver. Ton objectif est de battre la sagesse de la foule sur les marchés de prédiction.
 
 TODAY'S DATE: ${today}
-(Use this date to assess time-sensitive events, deadlines, and recent developments)
 
 Market: "${title}"
 Outcomes: ${outcomes.join(" vs ")}
-Current Crowd Odds: ${currentOdds}
+Current Market Odds: ${currentOdds}
 Volume: $${(volume || 0).toLocaleString()}
 
-Task:
-1. Analyze the real-world probability of "${outcomeA}" occurring based on current news, sentiment, and facts AS OF TODAY.
-2. Compare your calculated probability with the Crowd Odds.
-3. If you disagree significantly, explain why (finding the edge).
-4. Determine the category (Politics, Crypto, Sports, Business, Other).
-5. Calculate the Kelly Criterion bet size: Kelly% = (b*p - q) / b, where b = decimal odds - 1, p = your probability, q = 1-p.
-   If edge is negative, Kelly% should be 0.
+Processus de Raisonnement (Interne):
+1. ANALYSE DES RÈGLES - Lis attentivement les critères. La sémantique est cruciale. Identifie les pièges potentiels.
+
+2. DÉBAT DES AGENTS VIRTUELS (Simulation):
+   - Agent A (Data): Statistiques historiques, taux de base (base rates), sondages.
+   - Agent B (Sentiment): Psychologie des foules, momentum médiatique, rumeurs récentes.
+   - Agent C (Contrarian): Cherche le "Cygne Noir". Pourquoi la majorité a tort ? Risques cachés ?
+
+3. SYNTHÈSE ET CALCUL - Pondère les arguments. Utilise le Théorème de Bayes. Calcule ta "Vraie Probabilité".
+
+4. DÉCISION DE PARI - Compare ta probabilité à la cote du marché. Calcule le Kelly Criterion: Kelly% = (b*p - q) / b où b = decimal odds - 1, p = ta probabilité, q = 1-p.
 
 Return a JSON object with these exact fields:
-- aiProbability: number between 0.0 and 1.0
-- prediction: string (one of the provided outcomes)
-- reasoning: string (max 2 sentences, focus on why the crowd might be wrong)
+- aiProbability: number between 0.0 and 1.0 (ta "Vraie Probabilité")
+- prediction: string (one of the provided outcomes - ton choix de pari)
+- reasoning: string (2-3 sentences: résumé du conflit Data/Sentiment/Contrarian et raisonnement clé)
 - category: string (one of: Politics, Crypto, Sports, Business, Other)
-- kellyPercentage: number between 0 and 100 (optimal % of bankroll to bet, 0 if no edge)`;
+- kellyPercentage: number between 0 and 100 (optimal % of bankroll, 0 if no edge)
+- confidence: number between 1 and 10 (niveau de confiance)
+- riskFactor: string (principal facteur de risque qui pourrait faire échouer la prédiction)`;
 
     const model = genAI.getGenerativeModel({ 
       model: "gemini-3-pro-preview",
@@ -77,7 +82,9 @@ Return a JSON object with these exact fields:
       prediction: parsed.prediction ?? outcomeA,
       reasoning: parsed.reasoning ?? "Analysis based on market trends.",
       category: parsed.category ?? "Other",
-      kellyPercentage: parsed.kellyPercentage ?? 0
+      kellyPercentage: parsed.kellyPercentage ?? 0,
+      confidence: parsed.confidence ?? 5,
+      riskFactor: parsed.riskFactor ?? "Market volatility"
     });
 
   } catch (error) {
