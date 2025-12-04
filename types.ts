@@ -29,6 +29,7 @@ export interface MarketAnalysis {
   outcomes: string[];
   prediction: string; // The specific outcome the AI thinks is most likely
   confidence: number; // The probability of that prediction (0.5 - 1.0)
+  kellyPercentage: number; // Kelly criterion: optimal bet size as % of bankroll
   endDate?: string;
 }
 

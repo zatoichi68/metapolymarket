@@ -1,6 +1,6 @@
 import React from 'react';
 import { MarketAnalysis } from '../types';
-import { X, BrainCircuit, Users, TrendingUp, ExternalLink, AlertCircle } from 'lucide-react';
+import { X, BrainCircuit, Users, TrendingUp, ExternalLink, AlertCircle, Target } from 'lucide-react';
 
 interface MarketDetailModalProps {
   market: MarketAnalysis | null;
@@ -116,6 +116,26 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
                     </div>
                 )}
             </div>
+
+            {/* Kelly Criterion */}
+            {market.kellyPercentage > 0 && (
+              <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 border border-amber-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
+                    <Target size={24} />
+                  </div>
+                  <div>
+                    <div className="text-sm text-amber-300/80">Kelly Criterion - Optimal Bet Size</div>
+                    <div className="text-2xl font-bold text-amber-400">
+                      {market.kellyPercentage.toFixed(1)}% <span className="text-base font-normal text-amber-300/60">of bankroll</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-amber-300/60 mt-3">
+                  Based on the edge detected, this is the mathematically optimal percentage of your capital to allocate to this bet for maximum long-term growth.
+                </p>
+              </div>
+            )}
 
         </div>
 

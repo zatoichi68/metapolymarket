@@ -30,6 +30,7 @@ export const analyzeMarket = async (
   const prediction = result.prediction ?? outcomes[0];
   const reasoning = result.reasoning ?? "Analysis based on market trends.";
   const category = result.category ?? "Other";
+  const kellyPercentage = result.kellyPercentage ?? 0;
   const confidence = prediction === outcomes[0] ? aiProb : (1 - aiProb);
 
   return {
@@ -46,6 +47,7 @@ export const analyzeMarket = async (
     outcomes,
     prediction,
     confidence,
+    kellyPercentage,
     endDate
   };
 };

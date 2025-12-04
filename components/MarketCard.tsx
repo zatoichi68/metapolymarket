@@ -45,6 +45,11 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze }) => 
                  <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
                     <Sparkles size={8} /> Swarm Pick
                  </span>
+                 {market.kellyPercentage > 0 && (
+                   <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                     Kelly {market.kellyPercentage.toFixed(1)}%
+                   </span>
+                 )}
                  <button 
                     onClick={(e) => { e.preventDefault(); onAnalyze(market); }}
                     className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1 hover:bg-purple-500/30 transition-colors"
