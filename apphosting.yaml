@@ -10,10 +10,10 @@ runConfig:
   concurrency: 80
 
 env:
-  # === API Gemini (Google AI) ===
+  # === API OpenRouter (Grok 4.1 Fast) ===
   # Clé API sécurisée côté serveur uniquement (PAS de préfixe VITE_)
-  - variable: GEMINI_API_KEY
-    secret: gemini-api-key
+  - variable: OPENROUTER_API_KEY
+    secret: openrouter-api-key
 
   # === Configuration Firebase (préfixe VITE_ pour le frontend) ===
   - variable: VITE_FIREBASE_API_KEY

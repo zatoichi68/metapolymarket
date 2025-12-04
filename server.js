@@ -1,7 +1,6 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,14 +11,13 @@ const PORT = process.env.PORT || 8080;
 // Middleware pour parser le JSON
 app.use(express.json());
 
-// Clé API Gemini sécurisée côté serveur uniquement
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+// Clé API OpenRouter sécurisée côté serveur uniquement
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '';
 
-// Route API pour l'analyse AI (protège la clé Gemini)
+// Route API pour l'analyse AI (protège la clé OpenRouter)
 app.post('/api/analyze', async (req, res) => {
-  if (!genAI) {
-    return res.status(503).json({ error: 'AI service unavailable - GEMINI_API_KEY not configured' });
+  if (!OPENROUTER_API_KEY) {
+    return res.status(503).json({ error: 'AI service unavailable - OPENROUTER_API_KEY not configured' });
   }
 
   try {
@@ -62,20 +60,41 @@ Return a JSON object with these exact fields:
 - category: string (one of: Politics, Crypto, Sports, Business, Other)
 - kellyPercentage: number between 0 and 100 (optimal % of bankroll, 0 if no edge)
 - confidence: number between 1 and 10 (confidence level)
-- riskFactor: string (main risk factor that could invalidate the prediction)`;
+- riskFactor: string (main risk factor that could invalidate the prediction)
 
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-pro-preview",
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
+Respond ONLY with valid JSON, no markdown.`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'x-ai/grok-4.1-fast',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        reasoning: { enabled: true }
+      })
     });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenRouter API error:', errorText);
+      return res.status(503).json({ error: 'OpenRouter API error' });
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
     
-    const parsed = JSON.parse(text);
+    if (!text) {
+      throw new Error('No response from OpenRouter');
+    }
+
+    // Clean potential markdown code blocks
+    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleanText);
     
     res.json({
       aiProbability: parsed.aiProbability ?? marketProb,

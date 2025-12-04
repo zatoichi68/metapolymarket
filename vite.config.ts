@@ -10,8 +10,8 @@ function apiPlugin(): Plugin {
   return {
     name: 'api-plugin',
     configResolved() {
-      // Clé API pour dev local - en prod, utilise le secret Firebase
-      geminiApiKey = 'AIzaSyAE-sKwHqDLPuUmjmN2qnDObJz4-kHSgyE';
+      // Clé API OpenRouter pour dev local - en prod, utilise le secret Firebase
+      geminiApiKey = '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';
     },
     configureServer(server) {
       server.middlewares.use('/api/analyze', async (req, res) => {
@@ -33,7 +33,7 @@ function apiPlugin(): Plugin {
           if (!geminiApiKey) {
             res.statusCode = 503;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'AI service unavailable - GEMINI_API_KEY not configured in .env' }));
+            res.end(JSON.stringify({ error: 'AI service unavailable - OPENROUTER_API_KEY not configured' }));
             return;
           }
 
@@ -74,34 +74,42 @@ Return a JSON object with these exact fields:
 - riskFactor: string (main risk factor that could invalidate the prediction)`;
 
           const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
+            'https://openrouter.ai/api/v1/chat/completions',
             {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Authorization': `Bearer ${geminiApiKey}`,
+                'Content-Type': 'application/json'
+              },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
+                model: 'x-ai/grok-4.1-fast',
+                messages: [
+                  { role: 'user', content: prompt + '\n\nRespond ONLY with valid JSON, no markdown.' }
+                ],
+                reasoning: { enabled: true }
               })
             }
           );
 
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('Gemini API error:', errorText);
+            console.error('OpenRouter API error:', errorText);
             res.statusCode = 503;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Gemini API error' }));
+            res.end(JSON.stringify({ error: 'OpenRouter API error' }));
             return;
           }
 
           const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          const text = data.choices?.[0]?.message?.content;
           
           if (!text) {
-            throw new Error('No response from Gemini');
+            throw new Error('No response from OpenRouter');
           }
 
-          const parsed = JSON.parse(text);
+          // Clean potential markdown code blocks
+          const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const parsed = JSON.parse(cleanText);
 
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
