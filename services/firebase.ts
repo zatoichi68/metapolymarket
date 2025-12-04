@@ -1,21 +1,18 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, Firestore, collection, addDoc } from 'firebase/firestore';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
-// ⚠️ IMPORTANT: Replace this with YOUR OWN Firebase project configuration.
-// Without a valid project that you own, write operations will fail with "Insufficient Permissions" or "Project Not Found".
-// The configuration below is a placeholder/example.
+// Configuration Firebase via variables d'environnement (sécurisé)
 const firebaseConfig = {
-  apiKey: "AIzaSyBfJwBTc8XTNm4QmZaOmnMvNogueWxtcWY", // Replace with your API Key
-  authDomain: "metapolymarket.firebaseapp.com",       // Replace with your Auth Domain
-  projectId: "metapolymarket",                        // Replace with your Project ID
-  storageBucket: "metapolymarket.firebasestorage.app",
-  messagingSenderId: "140799832958",
-  appId: "1:140799832958:web:c8e3821cfcea758182392f",
-  measurementId: "G-GHW82RVCL0"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
 };
 
 let db: Firestore | null = null;
-let initError: any = null;
 
 try {
   // Initialize Firebase
@@ -29,34 +26,7 @@ try {
 } catch (error) {
   // Fallback to Live Mode (no caching)
   console.error("CRITICAL: Firebase initialization failed.", error);
-  initError = error;
   db = null;
 }
-
-/**
- * Helper to test if write permissions work
- */
-export const testFirestoreWrite = async () => {
-  if (!db) {
-    const msg = initError ? String(initError) : "Unknown initialization error (check console)";
-    return { 
-        success: false, 
-        error: `Database instance is null. Init Error: ${msg}` 
-    };
-  }
-  try {
-    const docRef = await addDoc(collection(db, "_connection_tests"), {
-      timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      status: "ok"
-    });
-    console.log("Test Write Success, ID:", docRef.id);
-    return { success: true, id: docRef.id };
-  } catch (e: any) {
-    console.error("Test Write Failed:", e);
-    // Common errors: "Missing or insufficient permissions", "Project not found"
-    return { success: false, error: e.message || String(e) };
-  }
-};
 
 export { db };

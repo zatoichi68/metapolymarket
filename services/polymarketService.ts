@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 // Providing a key (e.g. via headers) can sometimes help with rate limits, 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
-const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=10&active=true&closed=false&order=volume24hr&ascending=false';
+const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=50&active=true&closed=false&order=volume24hr&ascending=false';
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_URL = `${PROXY_URL}${encodeURIComponent(BASE_API_URL)}`;
 
@@ -71,16 +71,21 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
             if (!item) return null;
             const { event, market, prob, outcomes } = item;
             
-            return await analyzeMarket(
-                event.id,
-                event.slug || "",
-                event.title,
-                prob,
-                parseFloat(market.volume || "0"),
-                event.image,
-                outcomes,
-                event.endDate
-            );
+            try {
+                return await analyzeMarket(
+                    event.id,
+                    event.slug || "",
+                    event.title,
+                    prob,
+                    parseFloat(market.volume || "0"),
+                    event.image,
+                    outcomes,
+                    event.endDate
+                );
+            } catch (error) {
+                console.error(`Analysis failed for ${event.title}:`, error);
+                throw error; // Propagate error - no fallback
+            }
         })
     );
 

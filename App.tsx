@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyMarkets } from './services/polymarketService';
-import { testFirestoreWrite } from './services/firebase';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, Database } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -28,15 +27,6 @@ const App: React.FC = () => {
       setMarkets([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleTestDB = async () => {
-    const result = await testFirestoreWrite();
-    if (result.success) {
-      alert(`✅ Succès ! Donnée écrite dans Firestore.\nID: ${result.id}`);
-    } else {
-      alert(`❌ Erreur Écriture : ${result.error}\n\nVérifiez les 'Security Rules' dans la console Firebase.`);
     }
   };
 
@@ -102,13 +92,6 @@ const App: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-4">
-               <button 
-                onClick={handleTestDB}
-                className="hidden md:flex items-center gap-1 px-3 py-1.5 text-xs font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 rounded hover:bg-emerald-900/40 transition-colors"
-                title="Test Firebase Connection"
-               >
-                 <Database size={12} /> TEST DB
-               </button>
                <button 
                 onClick={loadData}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
