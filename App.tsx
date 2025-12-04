@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { getDailyMarkets } from './services/polymarketService';
 import { savePredictionsToHistory } from './services/historyService';
 import { PredictionHistory } from './components/PredictionHistory';
+import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('edge'); // 'edge', 'volume', 'kelly', 'date'
   const [showHistory, setShowHistory] = useState<boolean>(false);
+  const [showAlerts, setShowAlerts] = useState<boolean>(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -140,6 +142,19 @@ const App: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+               {/* Alerts Button with Badge */}
+               <button 
+                onClick={() => setShowAlerts(true)}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+               >
+                 <Flame size={16} className={getHighEdgeMarkets(markets).length > 0 ? "text-orange-400" : ""} />
+                 <span className="hidden sm:inline">Alerts</span>
+                 {getHighEdgeMarkets(markets).length > 0 && (
+                   <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                     {getHighEdgeMarkets(markets).length}
+                   </span>
+                 )}
+               </button>
                <button 
                 onClick={() => setShowHistory(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
@@ -350,6 +365,14 @@ const App: React.FC = () => {
         <PredictionHistory 
             isOpen={showHistory} 
             onClose={() => setShowHistory(false)} 
+        />
+
+        <EdgeAlerts 
+            isOpen={showAlerts} 
+            onClose={() => setShowAlerts(false)}
+            markets={markets}
+            onMarketClick={setSelectedMarket}
+            onBet={handleBetClick}
         />
 
         {/* How It Works Modal */}
