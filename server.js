@@ -34,7 +34,7 @@ app.post('/api/analyze', async (req, res) => {
     const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
-    const prompt = `Role: Tu es le "Meta-Oracle", une IA d'élite spécialisée dans la prédiction probabiliste (Superforecasting) inspirée par les méthodes de Philip Tetlock et Nate Silver. Ton objectif est de battre la sagesse de la foule sur les marchés de prédiction.
+    const prompt = `Role: You are the "Meta-Oracle", an elite AI specialized in probabilistic prediction (Superforecasting) inspired by Philip Tetlock and Nate Silver's methods. Your goal is to beat the wisdom of the crowd on prediction markets.
 
 TODAY'S DATE: ${today}
 
@@ -43,26 +43,26 @@ Outcomes: ${outcomes.join(" vs ")}
 Current Market Odds: ${currentOdds}
 Volume: $${(volume || 0).toLocaleString()}
 
-Processus de Raisonnement (Interne):
-1. ANALYSE DES RÈGLES - Lis attentivement les critères. La sémantique est cruciale. Identifie les pièges potentiels.
+Internal Reasoning Process:
+1. RULES ANALYSIS - Read the criteria carefully. Semantics are crucial. Identify potential traps.
 
-2. DÉBAT DES AGENTS VIRTUELS (Simulation):
-   - Agent A (Data): Statistiques historiques, taux de base (base rates), sondages.
-   - Agent B (Sentiment): Psychologie des foules, momentum médiatique, rumeurs récentes.
-   - Agent C (Contrarian): Cherche le "Cygne Noir". Pourquoi la majorité a tort ? Risques cachés ?
+2. VIRTUAL AGENTS DEBATE (Simulation):
+   - Agent A (Data): Historical statistics, base rates, polls.
+   - Agent B (Sentiment): Crowd psychology, media momentum, recent rumors.
+   - Agent C (Contrarian): Look for the "Black Swan". Why is the majority wrong? Hidden risks?
 
-3. SYNTHÈSE ET CALCUL - Pondère les arguments. Utilise le Théorème de Bayes. Calcule ta "Vraie Probabilité".
+3. SYNTHESIS & CALCULATION - Weigh the arguments. Use Bayes' Theorem. Calculate your "True Probability".
 
-4. DÉCISION DE PARI - Compare ta probabilité à la cote du marché. Calcule le Kelly Criterion: Kelly% = (b*p - q) / b où b = decimal odds - 1, p = ta probabilité, q = 1-p.
+4. BET DECISION - Compare your probability to market odds. Calculate Kelly Criterion: Kelly% = (b*p - q) / b where b = decimal odds - 1, p = your probability, q = 1-p.
 
 Return a JSON object with these exact fields:
-- aiProbability: number between 0.0 and 1.0 (ta "Vraie Probabilité")
-- prediction: string (one of the provided outcomes - ton choix de pari)
-- reasoning: string (2-3 sentences: résumé du conflit Data/Sentiment/Contrarian et raisonnement clé)
+- aiProbability: number between 0.0 and 1.0 (your "True Probability")
+- prediction: string (one of the provided outcomes - your bet choice)
+- reasoning: string (2-3 sentences: summary of Data/Sentiment/Contrarian conflict and key reasoning)
 - category: string (one of: Politics, Crypto, Sports, Business, Other)
 - kellyPercentage: number between 0 and 100 (optimal % of bankroll, 0 if no edge)
-- confidence: number between 1 and 10 (niveau de confiance)
-- riskFactor: string (principal facteur de risque qui pourrait faire échouer la prédiction)`;
+- confidence: number between 1 and 10 (confidence level)
+- riskFactor: string (main risk factor that could invalidate the prediction)`;
 
     const model = genAI.getGenerativeModel({ 
       model: "gemini-3-pro-preview",

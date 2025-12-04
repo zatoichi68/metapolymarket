@@ -142,7 +142,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
               <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
                 <h3 className="text-sm font-bold text-red-400 uppercase tracking-wide mb-2 flex items-center gap-2">
                     <AlertCircle size={16} />
-                    ⚠️ Facteur de Risque
+                    ⚠️ Risk Factor
                 </h3>
                 <p className="text-slate-300 text-sm">
                     {market.riskFactor}
