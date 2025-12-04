@@ -20,6 +20,19 @@ service cloud.firestore {
       // Pas de mise à jour ni suppression (cache immuable pour la journée)
       allow update, delete: if false;
     }
+
+    // Collection prediction_history - Historique des prédictions
+    match /prediction_history/{dateKey} {
+      // Lecture autorisée pour tous
+      allow read: if true;
+      
+      // Écriture autorisée pour créer/mettre à jour les prédictions du jour
+      allow create, update: if isValidDateKey(dateKey)
+                            && request.resource.data.keys().hasAll(['date', 'predictions', 'stats', 'createdAt'])
+                            && request.resource.data.date == dateKey;
+      
+      allow delete: if false;
+    }
     
     // Bloquer tout le reste
     match /{document=**} {

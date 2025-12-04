@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyMarkets } from './services/polymarketService';
+import { savePredictionsToHistory } from './services/historyService';
+import { PredictionHistory } from './components/PredictionHistory';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -15,6 +17,9 @@ const App: React.FC = () => {
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
   const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('edge'); // 'edge', 'volume', 'kelly', 'date'
+  const [showHistory, setShowHistory] = useState<boolean>(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -23,6 +28,11 @@ const App: React.FC = () => {
       // getDailyMarkets handles caching (Firebase) logic internally
       const data = await getDailyMarkets();
       setMarkets(data);
+      
+      // Save to prediction history
+      if (data.length > 0) {
+        savePredictionsToHistory(data).catch(console.error);
+      }
     } catch (err) {
       console.error(err);
       setError("Market data is currently unavailable.");
@@ -37,15 +47,18 @@ const App: React.FC = () => {
   }, []);
 
   const filteredMarkets = markets.filter(m => {
+    // Search Filter
+    const matchesSearch = searchQuery === '' 
+      ? true 
+      : m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.outcomes.some(o => o.toLowerCase().includes(searchQuery.toLowerCase()));
+
     // Category Filter
     const matchesCategory = selectedCategory === Category.ALL
       ? true
       : (m.category.toLowerCase().includes(selectedCategory.toLowerCase()) || (selectedCategory === 'Other' && !['Politics', 'Crypto', 'Sports', 'Business'].includes(m.category)));
     
     // Contrarian Filter (AI disagrees with Crowd)
-    // Crowd pick is Outcomes[0] if marketProb > 0.5, else Outcomes[1]
-    // AI pick is Outcomes[0] if aiProb > 0.5, else Outcomes[1]
-    // Disagreement means one is >= 0.5 and other is < 0.5
     const isContrarian = (m.marketProb >= 0.5 && m.aiProb < 0.5) || (m.marketProb < 0.5 && m.aiProb >= 0.5);
     const matchesContrarian = showContrarian ? isContrarian : true;
 
@@ -56,7 +69,6 @@ const App: React.FC = () => {
         const now = Date.now();
         const diff = end - now;
         
-        // Ensure event hasn't passed (diff > 0) although active=true in API covers this usually
         if (diff > 0) {
             if (timeFilter === '1d') matchesTime = diff <= 24 * 60 * 60 * 1000;
             else if (timeFilter === '1w') matchesTime = diff <= 7 * 24 * 60 * 60 * 1000;
@@ -66,7 +78,23 @@ const App: React.FC = () => {
         }
     }
 
-    return matchesCategory && matchesContrarian && matchesTime;
+    return matchesSearch && matchesCategory && matchesContrarian && matchesTime;
+  }).sort((a, b) => {
+    // Sort logic
+    switch (sortBy) {
+      case 'edge':
+        return Math.abs(b.edge) - Math.abs(a.edge);
+      case 'volume':
+        return b.volume - a.volume;
+      case 'kelly':
+        return (b.kellyPercentage || 0) - (a.kellyPercentage || 0);
+      case 'date':
+        if (!a.endDate) return 1;
+        if (!b.endDate) return -1;
+        return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+      default:
+        return 0;
+    }
   });
 
   const categories = Object.values(Category);
@@ -89,6 +117,13 @@ const App: React.FC = () => {
     { id: '1m', label: '< 1m' },
   ];
 
+  const sortOptions = [
+    { id: 'edge', label: 'Edge', icon: TrendingUp },
+    { id: 'volume', label: 'Volume', icon: DollarSign },
+    { id: 'kelly', label: 'Kelly %', icon: Target },
+    { id: 'date', label: 'End Date', icon: Calendar },
+  ];
+
   return (
     <div className="min-h-screen bg-poly-dark text-slate-100 pb-20 font-sans">
       
@@ -105,6 +140,13 @@ const App: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+               <button 
+                onClick={() => setShowHistory(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+               >
+                 <History size={16} />
+                 <span className="hidden sm:inline">History</span>
+               </button>
                <button 
                 onClick={() => setShowHowItWorks(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
@@ -136,8 +178,28 @@ const App: React.FC = () => {
           </p>
         </div>
 
+        {/* Search Bar */}
+        <div className="relative mb-4">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+          <input
+            type="text"
+            placeholder="Search markets..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+
         {/* Dashboard Controls */}
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-8 space-y-4 xl:space-y-0">
+        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-8 space-y-4">
           
           <div className="flex flex-col xl:flex-row gap-4 justify-between">
               
@@ -180,6 +242,30 @@ const App: React.FC = () => {
                         {tf.label}
                     </button>
                     ))}
+                </div>
+
+                <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1"></div>
+
+                {/* Sort Options */}
+                <div className="flex flex-wrap items-center gap-2">
+                    <ArrowUpDown size={18} className="text-slate-500 mr-2" />
+                    {sortOptions.map((opt) => {
+                      const Icon = opt.icon;
+                      return (
+                        <button
+                            key={opt.id}
+                            onClick={() => setSortBy(opt.id)}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1.5 ${
+                            sortBy === opt.id
+                                ? 'bg-emerald-600 text-white ring-1 ring-emerald-500'
+                                : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
+                            }`}
+                        >
+                            <Icon size={12} />
+                            {opt.label}
+                        </button>
+                      );
+                    })}
                 </div>
             </div>
 
@@ -259,6 +345,11 @@ const App: React.FC = () => {
             isOpen={!!selectedMarket} 
             onClose={() => setSelectedMarket(null)}
             onBet={handleBetClick}
+        />
+
+        <PredictionHistory 
+            isOpen={showHistory} 
+            onClose={() => setShowHistory(false)} 
         />
 
         {/* How It Works Modal */}
