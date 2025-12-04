@@ -206,7 +206,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 }
 
 /**
- * Save markets to Firestore
+ * Save markets to Firestore (daily collection)
  */
 async function saveToFirestore(markets) {
   const today = new Date().toISOString().split('T')[0];
@@ -255,6 +255,32 @@ async function saveToFirestore(markets) {
   });
 
   console.log(`Saved ${markets.length} markets to Firestore for ${today}`);
+}
+
+/**
+ * Save markets to hourly collection (premium)
+ */
+async function saveToHourlyFirestore(markets) {
+  const now = new Date();
+  const hourKey = now.toISOString().slice(0, 13).replace('T', '-'); // e.g., "2025-12-04-05"
+  
+  const hourlyPicksRef = db.collection('hourly_picks').doc(hourKey);
+  await hourlyPicksRef.set({
+    timestamp: now.toISOString(),
+    hour: hourKey,
+    markets: markets.map(m => {
+      const cleanMarket = { ...m };
+      Object.keys(cleanMarket).forEach(key => {
+        if (cleanMarket[key] === undefined) {
+          delete cleanMarket[key];
+        }
+      });
+      return cleanMarket;
+    }),
+    updatedAt: now.toISOString()
+  });
+
+  console.log(`Saved ${markets.length} hourly markets to Firestore for ${hourKey}`);
 }
 
 /**
@@ -333,6 +359,38 @@ export const manualRefresh = onRequest({
       success: false, 
       error: error.message 
     });
+  }
+});
+
+/**
+ * Scheduled function - runs every hour (PREMIUM)
+ */
+export const hourlyRefresh = onSchedule({
+  schedule: '0 * * * *', // Every hour at minute 0
+  timeZone: 'UTC',
+  secrets: [openrouterApiKey],
+  timeoutSeconds: 540,
+  memory: '1GiB'
+}, async (event) => {
+  console.log('Starting hourly market refresh (premium)...');
+  
+  try {
+    const apiKey = openrouterApiKey.value();
+    if (!apiKey) {
+      throw new Error('OPENROUTER_API_KEY not configured');
+    }
+
+    const markets = await fetchAndAnalyzeMarkets(apiKey);
+    
+    if (markets.length > 0) {
+      await saveToHourlyFirestore(markets);
+      console.log('Hourly refresh completed successfully!');
+    } else {
+      console.log('No markets analyzed - skipping save');
+    }
+  } catch (error) {
+    console.error('Hourly refresh failed:', error);
+    throw error;
   }
 });
 

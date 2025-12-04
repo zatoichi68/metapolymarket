@@ -1,7 +1,7 @@
 import { PolymarketEvent, MarketAnalysis } from '../types';
 import { analyzeMarket } from './aiService';
 import { db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 
 // Note: Gamma API (Public Data) does not generally require an API Key.
 // Providing a key (e.g. via headers) can sometimes help with rate limits, 
@@ -158,5 +158,39 @@ export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
         console.error("Error interacting with Firebase, falling back to live data:", error);
         // Fallback ensures app doesn't crash if Firebase quota exceeded or network error
         return fetchAndAnalyzeFreshMarkets();
+    }
+};
+
+/**
+ * Get the latest hourly markets (Premium feature)
+ * Returns the most recent hourly analysis from Firestore
+ */
+export const getHourlyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string } | null> => {
+    if (!db) {
+        console.log("Firebase not configured, hourly markets unavailable");
+        return null;
+    }
+
+    try {
+        // Get the most recent hourly_picks document
+        const hourlyRef = collection(db, "hourly_picks");
+        const q = query(hourlyRef, orderBy("timestamp", "desc"), limit(1));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            console.log("No hourly data available yet");
+            return null;
+        }
+
+        const latestDoc = querySnapshot.docs[0];
+        const data = latestDoc.data();
+        
+        return {
+            markets: data.markets as MarketAnalysis[],
+            timestamp: data.timestamp
+        };
+    } catch (error) {
+        console.error("Error fetching hourly markets:", error);
+        return null;
     }
 };
