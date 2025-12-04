@@ -317,6 +317,7 @@ export const dailyRefresh = onSchedule({
 
 /**
  * HTTP trigger for manual refresh (for testing)
+ * Use ?type=hourly to save to hourly_picks instead of daily_picks
  */
 export const manualRefresh = onRequest({
   secrets: [openrouterApiKey],
@@ -330,7 +331,8 @@ export const manualRefresh = onRequest({
     return;
   }
 
-  console.log('Starting manual market refresh...');
+  const refreshType = req.query.type || 'daily'; // 'daily' or 'hourly'
+  console.log(`Starting manual ${refreshType} market refresh...`);
   
   try {
     const apiKey = openrouterApiKey.value();
@@ -341,12 +343,22 @@ export const manualRefresh = onRequest({
     const markets = await fetchAndAnalyzeMarkets(apiKey);
     
     if (markets.length > 0) {
-      await saveToFirestore(markets);
-      res.json({ 
-        success: true, 
-        message: `Refreshed ${markets.length} markets`,
-        date: new Date().toISOString().split('T')[0]
-      });
+      if (refreshType === 'hourly') {
+        await saveToHourlyFirestore(markets);
+        const hourKey = new Date().toISOString().slice(0, 13).replace('T', '-');
+        res.json({ 
+          success: true, 
+          message: `Refreshed ${markets.length} markets (hourly)`,
+          hour: hourKey
+        });
+      } else {
+        await saveToFirestore(markets);
+        res.json({ 
+          success: true, 
+          message: `Refreshed ${markets.length} markets (daily)`,
+          date: new Date().toISOString().split('T')[0]
+        });
+      }
     } else {
       res.json({ 
         success: false, 
