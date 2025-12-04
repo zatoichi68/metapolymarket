@@ -175,7 +175,7 @@ const App: React.FC = () => {
                     }`}
                 >
                     <Swords size={16} />
-                    Against the Crowd
+                    Market Mispricing
                 </button>
 
                 <div className="text-slate-500 text-sm font-mono flex items-center gap-2">
