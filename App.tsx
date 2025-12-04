@@ -3,7 +3,7 @@ import { getDailyMarkets } from './services/polymarketService';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [showContrarian, setShowContrarian] = useState<boolean>(false);
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
+  const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -91,7 +92,14 @@ const App: React.FC = () => {
                 MetaPolymarket
               </span>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+               <button 
+                onClick={() => setShowHowItWorks(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+               >
+                 <HelpCircle size={16} />
+                 <span className="hidden sm:inline">How it works</span>
+               </button>
                <button 
                 onClick={loadData}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
@@ -238,6 +246,57 @@ const App: React.FC = () => {
             isOpen={!!selectedMarket} 
             onClose={() => setSelectedMarket(null)} 
         />
+
+        {/* How It Works Modal */}
+        {showHowItWorks && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowHowItWorks(false)} />
+            <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+              
+              <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white">How MetaPolymarket Works</h2>
+                <button onClick={() => setShowHowItWorks(false)} className="text-slate-500 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-purple-400 mb-2">🤖 The Meta-Oracle AI</h3>
+                  <p className="text-slate-300">
+                    Our AI acts as a "Superforecaster" inspired by Philip Tetlock's research. For each market, it simulates a debate between three virtual agents:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-slate-400 text-sm ml-4">
+                    <li>• <strong className="text-blue-400">Agent Data</strong> - Analyzes historical statistics and base rates</li>
+                    <li>• <strong className="text-green-400">Agent Sentiment</strong> - Evaluates crowd psychology and media momentum</li>
+                    <li>• <strong className="text-red-400">Agent Contrarian</strong> - Searches for "Black Swan" risks the crowd ignores</li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <h3 className="text-lg font-semibold text-amber-400 mb-2">📊 Kelly Criterion</h3>
+                  <p className="text-slate-300">
+                    When the AI detects an edge (difference between its probability and market odds), it calculates the optimal bet size using the Kelly Criterion - a mathematical formula for maximizing long-term growth while managing risk.
+                  </p>
+                </div>
+                
+                <div>
+                  <h3 className="text-lg font-semibold text-emerald-400 mb-2">⚡ Market Mispricing</h3>
+                  <p className="text-slate-300">
+                    The "Market Mispricing" filter shows markets where the AI strongly disagrees with the crowd - potential arbitrage opportunities where the market may be wrong.
+                  </p>
+                </div>
+                
+                <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+                  <p className="text-slate-400 text-sm">
+                    <strong className="text-slate-300">⚠️ Disclaimer:</strong> This tool is for informational purposes only. AI predictions are not financial advice. Always do your own research before placing any bets.
+                  </p>
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
