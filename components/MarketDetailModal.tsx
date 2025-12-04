@@ -6,9 +6,10 @@ interface MarketDetailModalProps {
   market: MarketAnalysis | null;
   isOpen: boolean;
   onClose: () => void;
+  onBet: (url: string) => void;
 }
 
-export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, isOpen, onClose }) => {
+export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, isOpen, onClose, onBet }) => {
   if (!isOpen || !market) return null;
 
   const marketPercent = Math.round(market.marketProb * 100);
@@ -154,14 +155,12 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
 
         {/* Footer Action */}
         <div className="p-5 border-t border-slate-800 bg-slate-900/50">
-            <a 
-              href={`https://polymarket.com/event/${market.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button 
+              onClick={() => { onClose(); onBet(`https://polymarket.com/event/${market.slug}`); }}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-purple-900/20"
             >
                 Execute Trade on Polymarket <ExternalLink size={18} />
-            </a>
+            </button>
         </div>
 
       </div>
