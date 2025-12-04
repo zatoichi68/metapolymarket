@@ -65,29 +65,35 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
         return { event, market, prob, outcomes };
     }).filter(item => item !== null && item.prob > 0.01 && item.prob < 0.99);
 
-    // Analyze in parallel
-    const analyzedMarkets = await Promise.all(
+    // Analyze in parallel - continue even if some fail
+    const results = await Promise.allSettled(
         preparedData.map(async (item) => {
             if (!item) return null;
             const { event, market, prob, outcomes } = item;
             
-            try {
-                return await analyzeMarket(
-                    event.id,
-                    event.slug || "",
-                    event.title,
-                    prob,
-                    parseFloat(market.volume || "0"),
-                    event.image,
-                    outcomes,
-                    event.endDate
-                );
-            } catch (error) {
-                console.error(`Analysis failed for ${event.title}:`, error);
-                throw error; // Propagate error - no fallback
-            }
+            return await analyzeMarket(
+                event.id,
+                event.slug || "",
+                event.title,
+                prob,
+                parseFloat(market.volume || "0"),
+                event.image,
+                outcomes,
+                event.endDate
+            );
         })
     );
+
+    // Extract successful results, log failures
+    const analyzedMarkets = results.map((result, index) => {
+        if (result.status === 'fulfilled') {
+            return result.value;
+        } else {
+            const item = preparedData[index];
+            console.warn(`Analysis failed for ${item?.event.title}:`, result.reason);
+            return null;
+        }
+    });
 
     return analyzedMarkets.filter((item): item is MarketAnalysis => item !== null);
 
