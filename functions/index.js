@@ -264,10 +264,11 @@ export const dailyRefresh = onSchedule({
 export const manualRefresh = onRequest({
   secrets: [openrouterApiKey],
   timeoutSeconds: 540,
-  memory: '1GiB'
+  memory: '1GiB',
+  cors: true
 }, async (req, res) => {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
+  // Allow GET and POST for easy testing
+  if (req.method !== 'POST' && req.method !== 'GET') {
     res.status(405).send('Method not allowed');
     return;
   }
