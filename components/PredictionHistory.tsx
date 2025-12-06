@@ -257,33 +257,19 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             if (onSelectMarket) {
-                                                // Calculate the crowd probability for the predicted outcome
-                                                const crowdProbForPrediction = p.aiProb - p.edge;
-                                                
-                                                // Determine outcomes - ensure prediction is in outcomes array
-                                                const outcomes = p.outcomes && p.outcomes.length >= 2 
-                                                    ? p.outcomes 
-                                                    : [p.aiPrediction, p.aiPrediction === "Yes" ? "No" : "Yes"];
-                                                
-                                                // If prediction is first outcome, marketProb = crowdProb
-                                                // If prediction is second outcome, marketProb = 1 - crowdProb (so modal can invert it back)
-                                                const isPredictionFirstOutcome = outcomes[0] === p.aiPrediction;
-                                                const adjustedMarketProb = isPredictionFirstOutcome 
-                                                    ? crowdProbForPrediction 
-                                                    : (1 - crowdProbForPrediction);
-
+                                                // Pass data directly - modal will calculate crowdProb = aiProb - edge
                                                 const market: MarketAnalysis = {
                                                     id: p.marketId,
                                                     slug: "",
                                                     title: p.title,
                                                     category: "Unknown",
                                                     imageUrl: "",
-                                                    marketProb: adjustedMarketProb,
+                                                    marketProb: p.marketProb, // Original value, modal ignores this now
                                                     aiProb: p.aiProb,
                                                     edge: p.edge,
                                                     reasoning: p.reasoning || "Detailed analysis for this historical prediction was not archived.",
                                                     volume: 0,
-                                                    outcomes: outcomes,
+                                                    outcomes: p.outcomes || ["Yes", "No"],
                                                     prediction: p.aiPrediction,
                                                     confidence: p.confidence || 0,
                                                     kellyPercentage: p.kellyPercentage,
