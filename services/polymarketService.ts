@@ -115,21 +115,23 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
     }
 
     try {
-        // 2. Query the most recent daily_picks document
-        const dailyRef = collection(db, "daily_picks");
-        const q = query(dailyRef, orderBy("date", "desc"), limit(1));
-        const querySnapshot = await getDocs(q);
+        // 2. Query for TODAY's cache specifically (using UTC Date to match Cloud Function)
+        const todayKey = new Date().toISOString().split('T')[0];
+        const docRef = doc(db, "daily_picks", todayKey);
+        const docSnap = await getDoc(docRef);
 
-        if (!querySnapshot.empty) {
-            const latestDoc = querySnapshot.docs[0];
-            const data = latestDoc.data();
-            const timestamp = data.timestamp || data.updatedAt || new Date().toISOString();
-            console.log(`Loading most recent cached data for ${data.date} (timestamp: ${timestamp})`);
-            const markets = data.markets as MarketAnalysis[];
-            return markets.length > 0 ? { markets, timestamp } : null;
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            // Validate data integrity
+            if (Array.isArray(data.markets) && data.markets.length > 0) {
+                const timestamp = data.timestamp || data.updatedAt || new Date().toISOString();
+                console.log(`Loading cached data for today: ${data.date} (timestamp: ${timestamp})`);
+                const markets = data.markets as MarketAnalysis[];
+                return { markets, timestamp };
+            }
         }
 
-        // 3. No recent cache: Fetch & Analyze fresh
+        // 3. No cache for today: Fetch & Analyze fresh
         console.log(`No recent daily cache found. Fetching fresh data...`);
         const freshData = await fetchAndAnalyzeFreshMarkets();
 
@@ -157,7 +159,7 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
                 timestamp: now
             });
             console.log(`Saved fresh data to ${todayKey}`);
-            return { markets: freshData, timestamp: now };
+            return { markets: sanitizedData, timestamp: now };
         }
 
         return null;
