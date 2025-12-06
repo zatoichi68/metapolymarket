@@ -832,7 +832,8 @@ export const checkResolutions = onSchedule({
  * HTTP Trigger for manual resolution check
  */
 export const manualResolution = onRequest({
-    cors: true
+    cors: true,
+    invoker: 'public'
 }, async (req, res) => {
     try {
         const count = await resolvePendingMarkets();
