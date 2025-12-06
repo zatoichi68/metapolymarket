@@ -26,30 +26,30 @@ export const analyzeMarket = async (
 
   const result = await response.json();
   
-  const aiProb = result.aiProbability ?? marketProb;
+    const aiProb = result.aiProbability ?? marketProb;
   const prediction = result.prediction ?? outcomes[0];
   const reasoning = result.reasoning ?? "Analysis based on market trends.";
-  const category = result.category ?? "Other";
+    const category = result.category ?? "Other";
   const kellyPercentage = result.kellyPercentage ?? 0;
   const confidence = result.confidence ?? 5; // Meta-Oracle confidence 1-10
   const riskFactor = result.riskFactor ?? "Market volatility";
 
-  return {
-    id,
-    slug,
-    title,
-    category,
-    imageUrl,
-    marketProb,
-    aiProb,
-    edge: aiProb - marketProb,
-    reasoning,
-    volume,
-    outcomes,
-    prediction,
-    confidence,
+    return {
+      id,
+      slug,
+      title,
+      category,
+      imageUrl,
+      marketProb,
+      aiProb,
+      edge: aiProb - marketProb,
+      reasoning,
+      volume,
+      outcomes,
+      prediction,
+      confidence,
     kellyPercentage,
     riskFactor,
-    endDate
-  };
+      endDate
+    };
 };
