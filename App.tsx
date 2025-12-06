@@ -551,17 +551,20 @@ const App: React.FC = () => {
           </div>
         )}
 
+        <PredictionHistory 
+            isOpen={showHistory} 
+            onClose={() => setShowHistory(false)}
+            initialTab="accuracy"
+            onSelectMarket={(m) => {
+                setSelectedMarket(m);
+            }}
+        />
+
         <MarketDetailModal 
             market={selectedMarket} 
             isOpen={!!selectedMarket} 
             onClose={() => setSelectedMarket(null)} 
             onBet={handleBetClick}
-        />
-
-        <PredictionHistory 
-            isOpen={showHistory} 
-            onClose={() => setShowHistory(false)}
-            initialTab="accuracy"  // New prop
         />
 
         <EdgeAlerts 

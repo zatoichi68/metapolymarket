@@ -22,14 +22,15 @@ ChartJS.register(
   Legend
 );
 
-import { getResolvedPredictions, BacktestStats } from '../services/historyService';
-
+import { getResolvedPredictions, getPredictionHistory, BacktestStats } from '../services/historyService';
 import { InfoTooltip } from './InfoTooltip';
+import { MarketAnalysis } from '../types';
 
 interface PredictionHistoryProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'history' | 'accuracy';
+  onSelectMarket?: (market: MarketAnalysis) => void;
 }
 
 interface ResolvedPrediction {
@@ -47,7 +48,7 @@ interface ResolvedPrediction {
   kellyReturn: number;
 }
 
-export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, onClose, initialTab = 'history' }) => {
+export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, onClose, initialTab = 'history', onSelectMarket }) => {
   const [activeTab, setActiveTab] = useState<'history' | 'accuracy'>('history');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [resolvedData, setResolvedData] = useState<{ predictions: ResolvedPrediction[], stats: BacktestStats } | null>(null);
@@ -63,10 +64,12 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load regular history (existing logic)
-      // ... (keep existing fetch for predictions)
+      // Load regular history (ALL predictions, pending and resolved)
+      const history = await getPredictionHistory(30); // Last 30 days
+      const allPreds = history.flatMap(h => h.predictions);
+      setPredictions(allPreds);
 
-      // Load backtesting data
+      // Load backtesting data (Only resolved)
       const resolved = await getResolvedPredictions(50);
       if (resolved) {
         setResolvedData(resolved);
@@ -80,28 +83,69 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
 
   if (!isOpen) return null;
 
-  const accuracyChartData = resolvedData ? {
-    labels: resolvedData.stats.overTime.map(item => item.date),
-    datasets: [
-      {
-        label: 'Accuracy %',
-        data: resolvedData.stats.overTime.map((_, index) => {
-          // Calculate rolling accuracy; simplify for demo
-          return Math.random() * 100; // Replace with real rolling calc
-        }),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        tension: 0.4
-      },
-      {
-        label: 'Kelly ROI',
-        data: resolvedData.stats.overTime.map((_, index) => Math.random() * 20 - 10), // Replace with real
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.5)',
-        tension: 0.4
-      }
-    ]
-  } : null;
+  // Calculate Rolling/Cumulative Stats for Chart
+  const getChartData = () => {
+      if (!resolvedData) return null;
+
+      // Sort all resolved predictions by date
+      const sortedPreds = [...resolvedData.predictions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Group by date to create daily data points
+      const predictionsByDate = new Map<string, ResolvedPrediction[]>();
+      sortedPreds.forEach(p => {
+          const date = p.date;
+          if (!predictionsByDate.has(date)) predictionsByDate.set(date, []);
+          predictionsByDate.get(date)?.push(p);
+      });
+
+      const dates = Array.from(predictionsByDate.keys()).sort();
+      
+      // Calculate CUMULATIVE stats over time
+      let cumulativeCorrect = 0;
+      let cumulativeTotal = 0;
+      let cumulativeRoi = 0;
+
+      const accuracyData = [];
+      const roiData = [];
+
+      dates.forEach(date => {
+          const dayPreds = predictionsByDate.get(date) || [];
+          
+          dayPreds.forEach(p => {
+              cumulativeTotal++;
+              if (p.wasCorrect) cumulativeCorrect++;
+              cumulativeRoi += p.kellyReturn;
+          });
+
+          const currentAccuracy = (cumulativeCorrect / cumulativeTotal) * 100;
+          const currentRoi = cumulativeRoi * 100; // Convert to percentage
+
+          accuracyData.push(currentAccuracy);
+          roiData.push(currentRoi);
+      });
+
+      return {
+        labels: dates,
+        datasets: [
+          {
+            label: 'Accuracy %',
+            data: accuracyData,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+            tension: 0.4
+          },
+          {
+            label: 'Kelly ROI %',
+            data: roiData,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.5)',
+            tension: 0.4
+          }
+        ]
+      };
+  };
+
+  const accuracyChartData = getChartData();
 
   const options = {
     responsive: true,
@@ -163,9 +207,110 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
             <>
               {activeTab === 'history' && (
                 // Existing history content
-                <div>
-                  {/* ... existing history UI ... */}
-                  <p className="text-slate-400">Global Stats: {predictions.length} predictions analyzed</p>
+                <div className="space-y-4">
+                  {predictions.length > 0 ? (
+                    predictions.map((p, i) => (
+                        <div key={i} className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                            <div className="flex-1">
+                                <div className="text-xs text-slate-500 mb-1 font-mono">{p.date}</div>
+                                <div className="font-bold text-white text-base mb-2">{p.title}</div>
+                                
+                                <div className="flex gap-6 text-sm">
+                                    <div>
+                                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Swarm AI</div>
+                                        <div className="font-bold text-purple-400">
+                                            {p.aiPrediction} <span className="text-slate-500 font-normal">({Math.round(p.aiProb * 100)}%)</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Crowd</div>
+                                        <div className="font-bold text-blue-400">
+                                            {/* Derive crowd prob from AI prob and Edge to ensure we compare apples to apples */}
+                                            {Math.round((p.aiProb - p.edge) * 100)}% <span className="text-slate-500 font-normal">on {p.aiPrediction}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 sm:text-right border-t sm:border-t-0 border-slate-700 pt-3 sm:pt-0 w-full sm:w-auto justify-between sm:justify-end">
+                                <div>
+                                    <div className="text-xs text-slate-500 mb-0.5">Edge</div>
+                                    <div className={`font-mono font-bold ${p.edge >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                        {p.edge >= 0 ? '+' : ''}{Math.round(p.edge * 1000) / 10}%
+                                    </div>
+                                </div>
+                                
+                                {p.outcome && p.outcome !== 'pending' ? (
+                                    <div className="text-right">
+                                        <div className="text-xs text-slate-500 mb-0.5">Result</div>
+                                        <div className={`font-bold px-2 py-1 rounded text-xs uppercase tracking-wide ${p.outcome === 'win' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                            {p.outcome === 'win' ? 'WON' : 'LOST'}
+                                        </div>
+                                        {p.resolvedOutcome && (
+                                            <div className="text-[10px] text-slate-500 mt-0.5">
+                                                Outcome: {p.resolvedOutcome}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (onSelectMarket) {
+                                                // Calculate the crowd probability for the predicted outcome
+                                                const crowdProbForPrediction = p.aiProb - p.edge;
+                                                
+                                                // Determine outcomes - ensure prediction is in outcomes array
+                                                const outcomes = p.outcomes && p.outcomes.length >= 2 
+                                                    ? p.outcomes 
+                                                    : [p.aiPrediction, p.aiPrediction === "Yes" ? "No" : "Yes"];
+                                                
+                                                // If prediction is first outcome, marketProb = crowdProb
+                                                // If prediction is second outcome, marketProb = 1 - crowdProb (so modal can invert it back)
+                                                const isPredictionFirstOutcome = outcomes[0] === p.aiPrediction;
+                                                const adjustedMarketProb = isPredictionFirstOutcome 
+                                                    ? crowdProbForPrediction 
+                                                    : (1 - crowdProbForPrediction);
+
+                                                const market: MarketAnalysis = {
+                                                    id: p.marketId,
+                                                    slug: "",
+                                                    title: p.title,
+                                                    category: "Unknown",
+                                                    imageUrl: "",
+                                                    marketProb: adjustedMarketProb,
+                                                    aiProb: p.aiProb,
+                                                    edge: p.edge,
+                                                    reasoning: p.reasoning || "Detailed analysis for this historical prediction was not archived.",
+                                                    volume: 0,
+                                                    outcomes: outcomes,
+                                                    prediction: p.aiPrediction,
+                                                    confidence: p.confidence || 0,
+                                                    kellyPercentage: p.kellyPercentage,
+                                                    riskFactor: p.riskFactor || "Risk factor details not available.",
+                                                    endDate: ""
+                                                };
+                                                onSelectMarket(market);
+                                            }
+                                        }}
+                                        className="px-3 py-1 bg-slate-700/50 hover:bg-slate-600 hover:text-white text-slate-400 rounded text-xs font-medium transition-colors flex items-center gap-2 group"
+                                        title="View Analysis"
+                                    >
+                                        PENDING
+                                        <Info size={12} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                  ) : (
+                      <div className="text-center py-12 text-slate-400">
+                        <p>No history found.</p>
+                      </div>
+                  )}
+                  <p className="text-slate-400 text-sm text-center pt-4 border-t border-slate-800">
+                    Global Stats: {predictions.length} predictions analyzed in the last 30 days
+                  </p>
                 </div>
               )}
               
