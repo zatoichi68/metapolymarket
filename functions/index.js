@@ -828,3 +828,31 @@ export const manualResolution = onRequest({
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+/**
+ * HTTP Trigger to clear prediction history (for resetting with correct calculations)
+ */
+export const clearPredictionHistory = onRequest({
+    cors: true
+}, async (req, res) => {
+    try {
+        const historyRef = db.collection('prediction_history');
+        const snapshot = await historyRef.get();
+        
+        const batch = db.batch();
+        let count = 0;
+        
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+            count++;
+        });
+        
+        await batch.commit();
+        
+        console.log(`Deleted ${count} prediction history documents`);
+        res.json({ success: true, deleted: count, message: 'History cleared. New predictions will be generated on next refresh.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
