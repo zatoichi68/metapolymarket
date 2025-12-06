@@ -10,6 +10,7 @@ import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriang
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
+  const [dailyTimestamp, setDailyTimestamp] = useState<string | null>(null);
   const [hourlyMarkets, setHourlyMarkets] = useState<MarketAnalysis[]>([]);
   const [hourlyTimestamp, setHourlyTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -45,25 +46,37 @@ const App: React.FC = () => {
     try {
       // Load daily markets (always)
       const dailyData = await getDailyMarkets();
-      setMarkets(dailyData);
-      
-      // Save to prediction history
-      if (dailyData.length > 0) {
-        savePredictionsToHistory(dailyData).catch(console.error);
+      if (dailyData) {
+        setMarkets(dailyData.markets);
+        setDailyTimestamp(dailyData.timestamp);
+        
+        // Save to prediction history
+        if (dailyData.markets.length > 0) {
+          savePredictionsToHistory(dailyData.markets).catch(console.error);
+        }
+      } else {
+        setMarkets([]);
+        setDailyTimestamp(null);
       }
-
+      
       // Load hourly markets if premium
       if (isPremium) {
         const hourlyData = await getHourlyMarkets();
         if (hourlyData) {
           setHourlyMarkets(hourlyData.markets);
           setHourlyTimestamp(hourlyData.timestamp);
+        } else {
+          setHourlyMarkets([]);
+          setHourlyTimestamp(null);
         }
       }
     } catch (err) {
       console.error(err);
       setError("Market data is currently unavailable.");
       setMarkets([]);
+      setDailyTimestamp(null);
+      setHourlyMarkets([]);
+      setHourlyTimestamp(null);
     } finally {
       setLoading(false);
     }
@@ -77,6 +90,26 @@ const App: React.FC = () => {
   const activeMarkets = (isPremium && dataSource === 'hourly' && hourlyMarkets.length > 0) 
     ? hourlyMarkets 
     : markets;
+
+  // Get active timestamp
+  const activeTimestamp = (isPremium && dataSource === 'hourly' && hourlyTimestamp) 
+    ? hourlyTimestamp 
+    : dailyTimestamp;
+
+  // Format timestamp to local DD/MM/YYYY HH:MM:SS
+  const formatTimestamp = (ts: string | null) => {
+    if (!ts) return 'Data loading...';
+    const date = new Date(ts);
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(',', '');
+  };
 
   const filteredMarkets = activeMarkets.filter(m => {
     // Search Filter
@@ -235,6 +268,52 @@ const App: React.FC = () => {
           <p className="text-slate-400 text-lg max-w-2xl">
             Detect arbitrage opportunities where AI disagrees with the Polymarket prediction market.
           </p>
+        </div>
+
+        {/* Data Source Info */}
+        <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Activity className="text-blue-400" size={20} />
+              <div>
+                <h3 className="text-white font-semibold flex items-center gap-2">
+                  {dataSource === 'hourly' ? 'Hourly Update' : 'Daily Update'}
+                  {dataSource === 'hourly' && <span className="text-xs bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE</span>}
+                </h3>
+                <p className="text-slate-400 text-sm">
+                  Last update: {formatTimestamp(activeTimestamp)}
+                </p>
+              </div>
+            </div>
+            {isPremium && (
+              <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1">
+                <button
+                  onClick={() => setDataSource('daily')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    dataSource === 'daily'
+                      ? 'bg-slate-700 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Daily (6AM UTC)
+                </button>
+                <button
+                  onClick={() => setDataSource('hourly')}
+                  disabled={hourlyMarkets.length === 0}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    dataSource === 'hourly'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                      : hourlyMarkets.length === 0 
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Clock size={14} />
+                  Hourly
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Premium Data Source Toggle */}

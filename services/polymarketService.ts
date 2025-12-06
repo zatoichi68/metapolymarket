@@ -107,10 +107,11 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
  * Main entry point.
  * Checks Firestore for the most recent daily cache. If none, runs fresh analysis and saves it.
  */
-export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
+export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string } | null> => {
     // 1. If Firebase is not configured, fallback to live fetch immediately.
     if (!db) {
-        return fetchAndAnalyzeFreshMarkets();
+        const freshData = await fetchAndAnalyzeFreshMarkets();
+        return freshData.length > 0 ? { markets: freshData, timestamp: new Date().toISOString() } : null;
     }
 
     try {
@@ -123,7 +124,7 @@ export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
             const latestDoc = querySnapshot.docs[0];
             const data = latestDoc.data();
             console.log(`Loading most recent cached data for ${data.date}`);
-            return data.markets as MarketAnalysis[];
+            return { markets: data.markets as MarketAnalysis[], timestamp: data.timestamp };
         }
 
         // 3. No recent cache: Fetch & Analyze fresh
@@ -146,20 +147,24 @@ export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
             });
 
             const docRef = doc(db, "daily_picks", todayKey);
+            const now = new Date().toISOString();
             await setDoc(docRef, {
                 date: todayKey,
                 markets: sanitizedData,
-                updatedAt: new Date().toISOString()
+                updatedAt: now,
+                timestamp: now
             });
             console.log(`Saved fresh data to ${todayKey}`);
+            return { markets: freshData, timestamp: now };
         }
 
-        return freshData;
+        return null;
 
     } catch (error) {
         console.error("Error interacting with Firebase, falling back to live data:", error);
         // Fallback ensures app doesn't crash if Firebase quota exceeded or network error
-        return fetchAndAnalyzeFreshMarkets();
+        const freshData = await fetchAndAnalyzeFreshMarkets();
+        return freshData.length > 0 ? { markets: freshData, timestamp: new Date().toISOString() } : null;
     }
 };
 
