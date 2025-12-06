@@ -105,7 +105,7 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
 
 /**
  * Main entry point.
- * Checks Firestore for today's cache. If missing, runs fresh analysis and saves it.
+ * Checks Firestore for the most recent daily cache. If none, runs fresh analysis and saves it.
  */
 export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
     // 1. If Firebase is not configured, fallback to live fetch immediately.
@@ -114,25 +114,26 @@ export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
     }
 
     try {
-        // 2. Generate a date key (e.g., "2023-10-27")
-        const todayKey = new Date().toISOString().split('T')[0];
-        const docRef = doc(db, "daily_picks", todayKey);
-        
-        // 3. Check Cache
-        const docSnap = await getDoc(docRef);
+        // 2. Query the most recent daily_picks document
+        const dailyRef = collection(db, "daily_picks");
+        const q = query(dailyRef, orderBy("date", "desc"), limit(1));
+        const querySnapshot = await getDocs(q);
 
-        if (docSnap.exists()) {
-            console.log(`Loading cached data for ${todayKey}`);
-            return docSnap.data().markets as MarketAnalysis[];
+        if (!querySnapshot.empty) {
+            const latestDoc = querySnapshot.docs[0];
+            const data = latestDoc.data();
+            console.log(`Loading most recent cached data for ${data.date}`);
+            return data.markets as MarketAnalysis[];
         }
 
-        // 4. Cache Miss: Fetch & Analyze
-        console.log(`No cache for ${todayKey}. Fetching fresh data...`);
+        // 3. No recent cache: Fetch & Analyze fresh
+        console.log(`No recent daily cache found. Fetching fresh data...`);
         const freshData = await fetchAndAnalyzeFreshMarkets();
 
-        // 5. Save to Cache (if we got data)
+        // 4. Save to Cache for today (if we got data)
         if (freshData.length > 0) {
             // Firestore does not accept 'undefined' values.
+            const todayKey = new Date().toISOString().split('T')[0];
             const sanitizedData = freshData.map(item => {
                 const cleanItem = { ...item };
                 // Remove undefined keys
@@ -144,6 +145,7 @@ export const getDailyMarkets = async (): Promise<MarketAnalysis[]> => {
                 return cleanItem;
             });
 
+            const docRef = doc(db, "daily_picks", todayKey);
             await setDoc(docRef, {
                 date: todayKey,
                 markets: sanitizedData,
