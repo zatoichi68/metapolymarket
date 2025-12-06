@@ -6,6 +6,7 @@ import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
 import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
+import { PremiumAccessModal } from './components/PremiumAccessModal';
 import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
+  const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
   const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('edge'); // 'edge', 'volume', 'kelly', 'date'
@@ -31,13 +33,72 @@ const App: React.FC = () => {
   });
   const [dataSource, setDataSource] = useState<'daily' | 'hourly'>('daily');
 
-  const togglePremium = () => {
-    const newValue = !isPremium;
-    setIsPremium(newValue);
-    localStorage.setItem('metapolymarket_premium', String(newValue));
-    if (!newValue) {
-      setDataSource('daily');
+  // Backend verification of premium status on mount
+  useEffect(() => {
+    const checkStatus = async () => {
+        const storedEmail = localStorage.getItem('metapolymarket_email');
+        const storedPremium = localStorage.getItem('metapolymarket_premium') === 'true';
+
+        if (storedPremium && storedEmail) {
+            try {
+                 // Determine API URL (inline logic similar to Modal for simplicity, or could be extracted to a helper)
+                 let apiUrl = '/api/checkPremiumStatus';
+                 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
+                 if (import.meta.env.DEV) {
+                    apiUrl = `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/checkPremiumStatus`;
+                 } else {
+                    apiUrl = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/checkPremiumStatus`;
+                 }
+
+                 const response = await fetch(apiUrl, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ email: storedEmail })
+                 });
+                 
+                 if (response.ok) {
+                     const data = await response.json();
+                     if (!data.isPremium) {
+                         console.log("Premium status revoked by backend.");
+                         setIsPremium(false);
+                         localStorage.setItem('metapolymarket_premium', 'false');
+                         setDataSource('daily');
+                     } else {
+                         console.log("Premium status confirmed.");
+                     }
+                 }
+            } catch (err) {
+                console.error("Failed to verify premium status:", err);
+                // On error (e.g. offline), we maintain the current local state
+            }
+        }
+    };
+    
+    checkStatus();
+  }, []);
+
+  const handlePremiumClick = () => {
+    if (isPremium) {
+      // If already premium, maybe show settings or just toggle off (optional)
+      // For now, let's keep it simple: if premium, it's just active.
+      // If user wants to toggle OFF for testing, we could add a debug option, 
+      // but usually you don't "turn off" premium.
+      // However, to respect the previous toggle behavior for testing:
+      const confirmDeactivate = window.confirm("Deactivate Premium mode?");
+      if (confirmDeactivate) {
+         setIsPremium(false);
+         localStorage.setItem('metapolymarket_premium', 'false');
+         setDataSource('daily');
+      }
+    } else {
+      setShowPremiumModal(true);
     }
+  };
+
+  const onPremiumSuccess = () => {
+      setIsPremium(true);
+      localStorage.setItem('metapolymarket_premium', 'true');
+      setDataSource('hourly'); // Switch to hourly immediately upon success
   };
 
   const loadData = async () => {
@@ -207,16 +268,19 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
                {/* Premium Toggle */}
                <button 
-                onClick={togglePremium}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all ${
+                onClick={handlePremiumClick}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all border ${
                   isPremium 
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-700'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 border-transparent' 
+                    : 'bg-slate-800/50 text-amber-400 hover:text-white hover:bg-slate-800 border-amber-500/30'
                 }`}
-                title={isPremium ? "Premium Active" : "Activate Premium"}
+                title={isPremium ? "Premium Active" : "Activate Premium - Free for a limited time"}
                >
                  <Crown size={16} className={isPremium ? "text-white" : "text-amber-400"} />
-                 <span className="hidden sm:inline">Premium</span>
+                 <div className="flex flex-col items-start leading-none">
+                    <span className="font-bold">{isPremium ? "Premium" : "Go Premium"}</span>
+                    {!isPremium && <span className="text-[10px] text-amber-200/80 font-medium hidden sm:inline-block">Free for a limited time</span>}
+                 </div>
                </button>
 
                {/* Alerts Button with Badge */}
@@ -501,6 +565,12 @@ const App: React.FC = () => {
             markets={activeMarkets}
             onMarketClick={setSelectedMarket}
             onBet={handleBetClick}
+        />
+
+        <PremiumAccessModal 
+            isOpen={showPremiumModal} 
+            onClose={() => setShowPremiumModal(false)}
+            onSuccess={onPremiumSuccess}
         />
 
         {/* How It Works Modal */}

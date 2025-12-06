@@ -3,15 +3,202 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defineSecret } from 'firebase-functions/params';
+import nodemailer from 'nodemailer';
 
 // Initialize Firebase Admin
 initializeApp();
 const db = getFirestore();
 
-// Define the OpenRouter API key secret
+// Define Secrets
 const openrouterApiKey = defineSecret('OPENROUTER_API_KEY');
+const smtpUser = defineSecret('SMTP_USER');
+const smtpPass = defineSecret('SMTP_PASS');
 
 const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
+
+/**
+ * Helper: Send Email via Nodemailer
+ * If SMTP secrets are not available, it logs the email content to console (Dev Mode)
+ */
+async function sendEmail(to, subject, html) {
+  let transporter;
+  const user = smtpUser.value();
+  const pass = smtpPass.value();
+
+  if (user && pass) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail', // Can be changed to other providers
+      auth: { user, pass }
+    });
+  } else {
+    console.log('⚠️ SMTP secrets not found. Simulating email send.');
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Body: ${html}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: '"MetaPolymarket" <noreply@metapolymarket.com>',
+    to,
+    subject,
+    html
+  });
+}
+
+/**
+ * Generate a random 6-digit code
+ */
+function generateCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * Cloud Function: Send Premium Verification Code
+ * Expects body: { email: string }
+ */
+export const sendPremiumVerificationCode = onRequest({
+  cors: true,
+  secrets: [smtpUser, smtpPass]
+}, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
+  }
+
+  const { email } = req.body;
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ success: false, error: 'Invalid email address' });
+    return;
+  }
+
+  try {
+    // 1. Check if user is already verified
+    const userDoc = await db.collection('premium_users').doc(email).get();
+    if (userDoc.exists && userDoc.data().verified) {
+      res.json({ success: true, message: 'Already verified', alreadyVerified: true });
+      return;
+    }
+
+    // 2. Generate and store code
+    const code = generateCode();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    await db.collection('premium_verifications').doc(email).set({
+      code,
+      expiresAt,
+      createdAt: new Date().toISOString()
+    });
+
+    // 3. Send Email
+    await sendEmail(
+      email,
+      'Your MetaPolymarket Verification Code',
+      `<div style="font-family: sans-serif; padding: 20px;">
+         <h2>Welcome to MetaPolymarket Premium!</h2>
+         <p>Your verification code is:</p>
+         <h1 style="color: #4F46E5; letter-spacing: 5px;">${code}</h1>
+         <p>This code expires in 15 minutes.</p>
+         <p>If you didn't request this, please ignore this email.</p>
+       </div>`
+    );
+
+    res.json({ success: true, message: 'Verification code sent' });
+
+  } catch (error) {
+    console.error('Error sending code:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Cloud Function: Validate Premium Verification Code
+ * Expects body: { email: string, code: string }
+ */
+export const validatePremiumCode = onRequest({
+  cors: true
+}, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
+  }
+
+  const { email, code } = req.body;
+
+  try {
+    // 1. Get stored code
+    const docRef = db.collection('premium_verifications').doc(email);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      res.status(400).json({ success: false, error: 'No verification code found for this email' });
+      return;
+    }
+
+    const data = doc.data();
+
+    // 2. Validate
+    if (Date.now() > data.expiresAt) {
+      res.status(400).json({ success: false, error: 'Code expired. Please request a new one.' });
+      return;
+    }
+
+    if (data.code !== code) {
+      res.status(400).json({ success: false, error: 'Invalid code' });
+      return;
+    }
+
+    // 3. Mark user as verified in persistent collection
+    await db.collection('premium_users').doc(email).set({
+      email,
+      verified: true,
+      joinedAt: new Date().toISOString(),
+      plan: 'free_trial' // "Free for a limited time" logic
+    });
+
+    // 4. Clean up verification doc
+    await docRef.delete();
+
+    res.json({ success: true, message: 'Verified successfully' });
+
+  } catch (error) {
+    console.error('Error validating code:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Cloud Function: Check Premium Status
+ * Expects body: { email: string }
+ */
+export const checkPremiumStatus = onRequest({
+  cors: true
+}, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
+  }
+
+  const { email } = req.body;
+  
+  if (!email) {
+     res.status(400).json({ isPremium: false });
+     return;
+  }
+
+  try {
+    const userDoc = await db.collection('premium_users').doc(email).get();
+    const isPremium = userDoc.exists && userDoc.data().verified;
+    
+    res.json({ isPremium });
+  } catch (error) {
+    console.error('Error checking status:', error);
+    res.status(500).json({ isPremium: false, error: error.message });
+  }
+});
+
+
+// ... Existing functions (keep them) ...
 
 /**
  * Analyze a market using OpenRouter Grok
@@ -405,4 +592,3 @@ export const hourlyRefresh = onSchedule({
     throw error;
   }
 });
-
