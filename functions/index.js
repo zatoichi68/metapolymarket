@@ -730,19 +730,24 @@ async function resolvePendingMarkets() {
                     item.resolvedAt = new Date().toISOString();
                     item.resolvedOutcome = winningOutcome;
                     
-                    // Calculate PnL if win (Simple approximation: +Edge/Odds or just +1 unit for win, -1 for loss)
-                    // For Kelly ROI, we need to know the odds we BET at.
-                    // We stored 'marketProb' at time of bet. 
-                    // ROI = (Outcome - Prob) / Prob ? No.
-                    // Log Return = ln(1 + profit_fraction)
+                    // Calculate PnL if win
+                    // ROI = (1 / BetProb) - 1 for Win, -1 for Loss
+                    // BetProb = probability of the PREDICTED outcome at entry time
+                    // If prediction matches outcomes[0], betProb = marketProb
+                    // If prediction matches outcomes[1], betProb = 1 - marketProb
                     
-                    // Simple ROI for display:
-                    // If Win: Profit = (1 / InitialMarketProb) - 1
-                    // If Loss: Profit = -1
+                    let betProb = item.marketProb;
+                    // Check if prediction was for second outcome
+                    if (outcomes.length >= 2) {
+                        const cleanOutcomeA = outcomes[0]?.trim().toLowerCase();
+                        if (cleanPrediction !== cleanOutcomeA) {
+                            betProb = 1 - item.marketProb;
+                        }
+                    }
                     
                     if (item.outcome === 'win') {
                         // Avoid division by zero
-                        const entryProb = Math.max(0.01, item.marketProb); 
+                        const entryProb = Math.max(0.01, betProb); 
                         item.roi = (1 / entryProb) - 1; 
                     } else {
                         item.roi = -1.0;

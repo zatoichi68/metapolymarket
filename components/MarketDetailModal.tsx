@@ -30,7 +30,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
   const isContrarian = (market.marketProb >= 0.5 && market.aiProb < 0.5) || (market.marketProb < 0.5 && market.aiProb >= 0.5);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" 

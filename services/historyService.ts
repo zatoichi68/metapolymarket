@@ -13,8 +13,14 @@ export interface PredictionRecord {
   marketProb: number;
   edge: number;
   kellyPercentage: number;
-  outcome?: 'pending' | 'correct' | 'incorrect';
+  reasoning?: string;     // Added
+  riskFactor?: string;    // Added
+  confidence?: number;    // Added
+  outcomes?: string[];    // Added
+  outcome?: 'pending' | 'correct' | 'incorrect' | 'win' | 'loss';
   resolvedAt?: string;
+  resolvedOutcome?: string;
+  roi?: number;
 }
 
 export interface DailyStats {
@@ -45,6 +51,10 @@ export const savePredictionsToHistory = async (markets: MarketAnalysis[]): Promi
     marketProb: m.marketProb,
     edge: m.edge,
     kellyPercentage: m.kellyPercentage || 0,
+    reasoning: m.reasoning,
+    riskFactor: m.riskFactor,
+    confidence: m.confidence,
+    outcomes: m.outcomes,
     outcome: 'pending' as const
   }));
 
@@ -159,13 +169,13 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
           marketProb: p.marketProb,
           aiProb: p.aiProb,
           edge: p.edge,
-          reasoning: "", 
+          reasoning: p.reasoning || "Analysis details not archived for this prediction.", 
           volume: 0, 
-          outcomes: ["Yes", "No"], 
+          outcomes: p.outcomes || ["Yes", "No"], 
           prediction: p.aiPrediction,
-          confidence: 0, 
+          confidence: p.confidence || 0, 
           kellyPercentage: p.kellyPercentage,
-          riskFactor: "", 
+          riskFactor: p.riskFactor || "Risk factor not archived.", 
           resolvedOutcome: (p.resolvedOutcome || (wasCorrect ? p.aiPrediction : 'Other')) as 'Yes' | 'No',
           wasCorrect,
           brierError,
