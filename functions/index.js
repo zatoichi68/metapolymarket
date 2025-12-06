@@ -231,13 +231,15 @@ Internal Reasoning Process:
 4. BET DECISION - Compare your probability to market odds. Calculate Kelly Criterion: Kelly% = (b*p - q) / b where b = decimal odds - 1, p = your probability, q = 1-p.
 
 Return a JSON object with these exact fields:
-- aiProbability: number between 0.0 and 1.0 (your "True Probability")
-- prediction: string (one of the provided outcomes - your bet choice)
+- aiProbability: number between 0.0 and 1.0 (probability that "${outcomeA}" wins - the FIRST outcome listed)
+- prediction: string (one of the provided outcomes - your bet choice, the outcome you recommend betting ON)
 - reasoning: string (2-3 sentences: summary of Data/Sentiment/Contrarian conflict and key reasoning)
 - category: string (one of: Politics, Crypto, Sports, Business, Other)
 - kellyPercentage: number between 0 and 100 (optimal % of bankroll, 0 if no edge)
 - confidence: number between 1 and 10 (confidence level)
 - riskFactor: string (main risk factor that could invalidate the prediction)
+
+IMPORTANT: aiProbability must be the probability for "${outcomeA}" (first outcome), regardless of which outcome you predict.
 
 Respond ONLY with valid JSON, no markdown.`;
 
@@ -343,6 +345,18 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
         const aiProb = analysis.aiProbability ?? prob;
         const prediction = analysis.prediction ?? outcomes[0];
+        
+        // Calculate edge correctly based on which outcome is predicted
+        // aiProb is ALWAYS for outcomes[0] (first outcome)
+        // If predicting outcomes[0]: edge = aiProb - prob
+        // If predicting outcomes[1]: edge = (1 - aiProb) - (1 - prob) = prob - aiProb
+        let calculatedEdge = 0;
+        if (prediction === outcomes[0]) {
+          calculatedEdge = aiProb - prob;
+        } else {
+          // For second outcome, both AI and market probs need to be inverted
+          calculatedEdge = (1 - aiProb) - (1 - prob);
+        }
 
         return {
           success: true,
@@ -354,7 +368,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
             imageUrl: event.image,
             marketProb: prob,
             aiProb,
-            edge: aiProb - prob,
+            edge: calculatedEdge,
             reasoning: analysis.reasoning ?? "Analysis based on market trends.",
             volume: parseFloat(market.volume || "0"),
             outcomes,
