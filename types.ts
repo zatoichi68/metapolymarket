@@ -34,6 +34,12 @@ export interface MarketAnalysis {
   endDate?: string;
 }
 
+export interface ResolvedMarket {
+  id: string;
+  title: string;
+  resolvedOutcome: string;
+}
+
 export interface ResolvedPrediction extends MarketAnalysis {
   resolvedOutcome: 'Yes' | 'No';
   wasCorrect: boolean;

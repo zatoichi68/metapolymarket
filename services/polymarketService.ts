@@ -1,4 +1,4 @@
-import { PolymarketEvent, MarketAnalysis } from '../types';
+import { PolymarketEvent, MarketAnalysis, ResolvedMarket } from '../types';
 import { analyzeMarket } from './aiService';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
@@ -201,5 +201,54 @@ export const getHourlyMarkets = async (): Promise<{ markets: MarketAnalysis[], t
     } catch (error) {
         console.error("Error fetching hourly markets:", error);
         return null;
+    }
+};
+
+/**
+ * Get resolved markets from Polymarket API (closed markets)
+ * Used for backtesting purposes.
+ */
+export const getResolvedMarkets = async (limitCount = 100): Promise<ResolvedMarket[]> => {
+    try {
+        const url = `${PROXY_URL}${encodeURIComponent(`https://gamma-api.polymarket.com/events?limit=${limitCount}&closed=true&order=volume&ascending=false`)}`;
+        const response = await fetch(url);
+        if (!response.ok) return [];
+        const data = await response.json();
+        
+        if (!Array.isArray(data)) return [];
+
+        return data.map((event: any) => {
+             const market = event.markets?.[0];
+             if (!market || !market.outcomePrices || !market.outcomes) return null;
+
+             try {
+                 const prices = typeof market.outcomePrices === 'string' 
+                    ? JSON.parse(market.outcomePrices)
+                    : market.outcomePrices;
+                    
+                 const outcomes = typeof market.outcomes === 'string'
+                    ? JSON.parse(market.outcomes)
+                    : market.outcomes;
+                 
+                 // Find winning index (price > 0.95)
+                 // Note: Polymarket outcomePrices are strings, need to parse floats
+                 const winningIndex = prices.findIndex((p: string | number) => parseFloat(String(p)) > 0.95);
+                 
+                 if (winningIndex === -1) return null; // Not clearly resolved yet
+
+                 const resolvedOutcome = outcomes[winningIndex];
+                 
+                 return {
+                     id: event.id,
+                     title: event.title,
+                     resolvedOutcome
+                 };
+             } catch (e) {
+                 return null;
+             }
+        }).filter((m: any): m is ResolvedMarket => m !== null);
+    } catch (e) {
+        console.error("Error fetching resolved markets:", e);
+        return [];
     }
 };
