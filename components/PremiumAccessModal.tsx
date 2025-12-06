@@ -22,16 +22,21 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
   // Retrieve Project ID from env vars (same as firebase.ts)
   const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
   
+  // Cloud Run URLs for Firebase Functions v2 (project hash: krtdefxoka)
+  const CLOUD_RUN_URLS: Record<string, string> = {
+    sendPremiumVerificationCode: 'https://sendpremiumverificationcode-krtdefxoka-uc.a.run.app',
+    validatePremiumCode: 'https://validatepremiumcode-krtdefxoka-uc.a.run.app',
+    checkPremiumStatus: 'https://checkpremiumstatus-krtdefxoka-uc.a.run.app',
+  };
+  
   // Helper to determine API URL dynamically
   const getApiUrl = (funcName: string) => {
       // In development, assume local emulator
       if (import.meta.env.DEV) {
-          // IMPORTANT: Check your terminal for the actual emulator port and project ID!
-          // Default: http://127.0.0.1:5001/[PROJECT_ID]/us-central1/[FUNCTION_NAME]
           return `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/${funcName}`; 
       }
-      // In production
-      return `https://us-central1-${PROJECT_ID}.cloudfunctions.net/${funcName}`; 
+      // In production, use Cloud Run URLs
+      return CLOUD_RUN_URLS[funcName] || `https://us-central1-${PROJECT_ID}.cloudfunctions.net/${funcName}`; 
   };
 
   const handleSendCode = async (e: React.FormEvent) => {
