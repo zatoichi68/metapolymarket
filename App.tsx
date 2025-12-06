@@ -273,6 +273,11 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
                {/* Premium Toggle */}
+               {isPremium && (
+                 <span className="text-xs text-slate-400 hidden md:inline-block">
+                   Welcome, <span className="text-amber-400 font-medium">{localStorage.getItem('metapolymarket_email') || 'Premium User'}</span>
+                 </span>
+               )}
                <button 
                 onClick={handlePremiumClick}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all border ${
