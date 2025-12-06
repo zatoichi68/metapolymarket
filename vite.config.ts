@@ -6,8 +6,8 @@ import type { Plugin } from 'vite';
 // Plugin pour gérer /api/analyze en développement
 function apiPlugin(): Plugin {
   let geminiApiKey: string;
-  
-  return {
+
+    return {
     name: 'api-plugin',
     configResolved(config) {
       // Charger la clé depuis .env (OPENROUTER_API_KEY) - jamais hardcodée !
@@ -139,14 +139,14 @@ Return a JSON object with these exact fields:
 }
 
 export default defineConfig({
-  server: {
-    port: 3000,
-    host: '0.0.0.0',
-  },
+      server: {
+        port: 3000,
+        host: '0.0.0.0',
+      },
   plugins: [react(), apiPlugin()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-    }
-  }
+      resolve: {
+        alias: {
+          '@': path.resolve(__dirname, '.'),
+        }
+      }
 });

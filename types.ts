@@ -34,6 +34,23 @@ export interface MarketAnalysis {
   endDate?: string;
 }
 
+export interface ResolvedPrediction extends MarketAnalysis {
+  resolvedOutcome: 'Yes' | 'No';
+  wasCorrect: boolean;
+  brierError: number;
+  kellyReturn: number;
+}
+
+export interface BacktestStats {
+  total: number;
+  accuracy: number;
+  brierScore: number;
+  avgBrier: number;
+  kellyROI: number;
+  winRate: number;
+  overTime: { date: string; count: number }[];
+}
+
 export enum Category {
   ALL = 'All',
   POLITICS = 'Politics',

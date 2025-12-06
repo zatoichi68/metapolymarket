@@ -233,11 +233,15 @@ const App: React.FC = () => {
                  )}
                </button>
                <button 
-                onClick={() => setShowHistory(true)}
+                onClick={() => {
+                  setShowHistory(true);
+                  // Focus on accuracy tab
+                  // Note: Since state is internal, we'll add a prop to PredictionHistory for initial tab
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                >
-                 <History size={16} />
-                 <span className="hidden sm:inline">History</span>
+                 <BarChart3 size={16} />  // Change icon to BarChart3 for backtesting focus
+                 <span className="hidden sm:inline">Backtest</span>  // Rename button to "Backtest"
                </button>
                <button 
                 onClick={() => setShowHowItWorks(true)}
@@ -487,7 +491,8 @@ const App: React.FC = () => {
 
         <PredictionHistory 
             isOpen={showHistory} 
-            onClose={() => setShowHistory(false)} 
+            onClose={() => setShowHistory(false)}
+            initialTab="accuracy"  // New prop
         />
 
         <EdgeAlerts 
