@@ -316,54 +316,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Premium Data Source Toggle */}
-        {isPremium && (
-          <div className="mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Sparkles className="text-amber-400" size={20} />
-                <div>
-                  <h3 className="text-white font-semibold flex items-center gap-2">
-                    Premium Data Access
-                    <span className="text-xs bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE</span>
-                  </h3>
-                  <p className="text-slate-400 text-sm">
-                    {hourlyTimestamp 
-                      ? `Last hourly update: ${new Date(hourlyTimestamp).toLocaleString()}`
-                      : 'Hourly updates available soon'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1">
-                <button
-                  onClick={() => setDataSource('daily')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                    dataSource === 'daily'
-                      ? 'bg-slate-700 text-white'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Daily (6AM UTC)
-                </button>
-                <button
-                  onClick={() => setDataSource('hourly')}
-                  disabled={hourlyMarkets.length === 0}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-                    dataSource === 'hourly'
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-                      : hourlyMarkets.length === 0 
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Clock size={14} />
-                  Hourly
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Search Bar */}
         <div className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
