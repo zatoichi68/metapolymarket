@@ -123,8 +123,10 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
         if (!querySnapshot.empty) {
             const latestDoc = querySnapshot.docs[0];
             const data = latestDoc.data();
-            console.log(`Loading most recent cached data for ${data.date}`);
-            return { markets: data.markets as MarketAnalysis[], timestamp: data.timestamp };
+            const timestamp = data.timestamp || data.updatedAt || new Date().toISOString();
+            console.log(`Loading most recent cached data for ${data.date} (timestamp: ${timestamp})`);
+            const markets = data.markets as MarketAnalysis[];
+            return markets.length > 0 ? { markets, timestamp } : null;
         }
 
         // 3. No recent cache: Fetch & Analyze fresh
