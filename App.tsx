@@ -8,7 +8,7 @@ import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
 import { PremiumAccessModal } from './components/PremiumAccessModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark, Droplets, Timer, GitBranch } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -34,7 +34,7 @@ const App: React.FC = () => {
   const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
   const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('edge'); // 'edge', 'volume', 'kelly', 'date'
+  const [sortBy, setSortBy] = useState<string>('volume24h'); // Sort options like Polymarket
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [showAlerts, setShowAlerts] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(() => {
@@ -207,7 +207,7 @@ const App: React.FC = () => {
     // Favorites Filter
     const matchesFavorites = showFavorites ? favorites.includes(m.id) : true;
 
-    // Time Filter
+    // Frequency Filter (based on resolution timeframe)
     let matchesTime = true;
     if (timeFilter !== 'all' && m.endDate) {
         const end = new Date(m.endDate).getTime();
@@ -215,9 +215,9 @@ const App: React.FC = () => {
         const diff = end - now;
         
         if (diff > 0) {
-            if (timeFilter === '1d') matchesTime = diff <= 24 * 60 * 60 * 1000;
-            else if (timeFilter === '1w') matchesTime = diff <= 7 * 24 * 60 * 60 * 1000;
-            else if (timeFilter === '1m') matchesTime = diff <= 30 * 24 * 60 * 60 * 1000;
+            if (timeFilter === 'daily') matchesTime = diff <= 24 * 60 * 60 * 1000;
+            else if (timeFilter === 'weekly') matchesTime = diff <= 7 * 24 * 60 * 60 * 1000;
+            else if (timeFilter === 'monthly') matchesTime = diff <= 30 * 24 * 60 * 60 * 1000;
         } else {
             matchesTime = false;
         }
@@ -225,20 +225,31 @@ const App: React.FC = () => {
 
     return matchesSearch && matchesCategory && matchesContrarian && matchesTime && matchesFavorites;
   }).sort((a, b) => {
-    // Sort logic
+    // Sort logic (matching Polymarket options)
     switch (sortBy) {
-      case 'edge':
-        return Math.abs(b.edge) - Math.abs(a.edge);
+      case 'volume24h':
+        // Use volume as proxy for 24h volume (we don't have separate 24h data)
+        return b.volume - a.volume;
       case 'volume':
         return b.volume - a.volume;
-      case 'kelly':
-        return (b.kellyPercentage || 0) - (a.kellyPercentage || 0);
-      case 'date':
+      case 'liquidity':
+        // Use volume as proxy for liquidity
+        return b.volume - a.volume;
+      case 'newest':
+        // Sort by most recently added (we don't have created date, use ID as proxy)
+        return b.id.localeCompare(a.id);
+      case 'ending':
+        // Ending Soon - closest end date first
         if (!a.endDate) return 1;
         if (!b.endDate) return -1;
         return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+      case 'competitive':
+        // Most competitive = closest to 50/50 odds
+        const aCompetitive = Math.abs(a.marketProb - 0.5);
+        const bCompetitive = Math.abs(b.marketProb - 0.5);
+        return aCompetitive - bCompetitive;
       default:
-        return 0;
+        return b.volume - a.volume;
     }
   });
 
@@ -262,18 +273,20 @@ const App: React.FC = () => {
     trackMarketView(market.id, market.title);
   };
   
-  const timeFilters = [
-    { id: 'all', label: 'Any Time' },
-    { id: '1d', label: '< 24h' },
-    { id: '1w', label: '< 1w' },
-    { id: '1m', label: '< 1m' },
+  const frequencyFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'daily', label: 'Daily' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
   ];
 
   const sortOptions = [
-    { id: 'edge', label: 'Edge', icon: TrendingUp },
-    { id: 'volume', label: 'Volume', icon: DollarSign },
-    { id: 'kelly', label: 'Kelly %', icon: Target },
-    { id: 'date', label: 'End Date', icon: Calendar },
+    { id: 'volume24h', label: '24hr Volume', icon: TrendingUp },
+    { id: 'volume', label: 'Total Volume', icon: DollarSign },
+    { id: 'liquidity', label: 'Liquidity', icon: Droplets },
+    { id: 'newest', label: 'Newest', icon: GitBranch },
+    { id: 'ending', label: 'Ending Soon', icon: Timer },
+    { id: 'competitive', label: 'Competitive', icon: Swords },
   ];
 
   return (
@@ -468,46 +481,34 @@ const App: React.FC = () => {
 
                 <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1"></div>
 
-                {/* Time Filters */}
+                {/* Sort By (like Polymarket) */}
                 <div className="flex flex-wrap items-center gap-2">
-                    <Clock size={18} className="text-slate-500 mr-2" />
-                    {timeFilters.map((tf) => (
-                    <button
-                        key={tf.id}
-                        onClick={() => setTimeFilter(tf.id)}
-                        className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all ${
-                        timeFilter === tf.id
-                            ? 'bg-slate-600 text-white ring-1 ring-slate-500'
-                            : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
-                        }`}
+                    <span className="text-xs text-slate-500 font-medium">Sort by:</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                     >
-                        {tf.label}
-                    </button>
-                    ))}
+                      {sortOptions.map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
                 </div>
 
                 <div className="hidden sm:block w-px h-6 bg-slate-700 mx-1"></div>
 
-                {/* Sort Options */}
+                {/* Frequency (like Polymarket) */}
                 <div className="flex flex-wrap items-center gap-2">
-                    <ArrowUpDown size={18} className="text-slate-500 mr-2" />
-                    {sortOptions.map((opt) => {
-                      const Icon = opt.icon;
-                      return (
-                        <button
-                            key={opt.id}
-                            onClick={() => setSortBy(opt.id)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1.5 ${
-                            sortBy === opt.id
-                                ? 'bg-emerald-600 text-white ring-1 ring-emerald-500'
-                                : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
-                            }`}
-                        >
-                            <Icon size={12} />
-                            {opt.label}
-                        </button>
-                      );
-                    })}
+                    <span className="text-xs text-slate-500 font-medium">Frequency:</span>
+                    <select
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {frequencyFilters.map((f) => (
+                        <option key={f.id} value={f.id}>{f.label}</option>
+                      ))}
+                    </select>
                 </div>
             </div>
 
