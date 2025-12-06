@@ -1,5 +1,6 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAnalytics, Analytics, logEvent, isSupported } from 'firebase/analytics';
 
 // Configuration Firebase via variables d'environnement (sécurisé)
 const firebaseConfig = {
@@ -12,21 +13,51 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
 };
 
+let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let analytics: Analytics | null = null;
 
 try {
   // Initialize Firebase
-  // If imports are correct, this object creation is synchronous and should succeed.
-  const app = initializeApp(firebaseConfig);
+  app = initializeApp(firebaseConfig);
   
   // Initialize Firestore
-  // This is where version mismatches usually cause a crash ("Service firestore is not available").
   db = getFirestore(app);
   console.log("Firebase initialized successfully");
+  
+  // Initialize Analytics (only in browser environment)
+  isSupported().then((supported) => {
+    if (supported && app) {
+      analytics = getAnalytics(app);
+      console.log("Firebase Analytics initialized");
+    }
+  });
 } catch (error) {
-  // Fallback to Live Mode (no caching)
   console.error("CRITICAL: Firebase initialization failed.", error);
   db = null;
 }
 
-export { db };
+// Analytics helper functions
+export const trackEvent = (eventName: string, params?: Record<string, any>) => {
+  if (analytics) {
+    logEvent(analytics, eventName, params);
+  }
+};
+
+export const trackPageView = (pageName: string) => {
+  trackEvent('page_view', { page_title: pageName });
+};
+
+export const trackPremiumSignup = (email: string) => {
+  trackEvent('premium_signup', { method: 'email' });
+};
+
+export const trackMarketView = (marketId: string, marketTitle: string) => {
+  trackEvent('view_market', { market_id: marketId, market_title: marketTitle });
+};
+
+export const trackBetClick = (marketId: string, marketTitle: string) => {
+  trackEvent('bet_click', { market_id: marketId, market_title: marketTitle });
+};
+
+export { db, analytics };

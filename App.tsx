@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyMarkets, getHourlyMarkets } from './services/polymarketService';
 import { savePredictionsToHistory } from './services/historyService';
+import { trackPageView, trackPremiumSignup, trackMarketView, trackBetClick } from './services/firebase';
 import { PredictionHistory } from './components/PredictionHistory';
 import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
 import { MarketAnalysis, Category } from './types';
@@ -100,6 +101,9 @@ const App: React.FC = () => {
       setIsPremium(true);
       localStorage.setItem('metapolymarket_premium', 'true');
       setDataSource('hourly'); // Switch to hourly immediately upon success
+      // Track premium signup
+      const email = localStorage.getItem('metapolymarket_email') || '';
+      trackPremiumSignup(email);
   };
 
   const loadData = async () => {
@@ -146,6 +150,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // Track page view on initial load
+    trackPageView('Home');
   }, [isPremium]);
 
   // Use hourly data if premium and selected, otherwise daily
@@ -231,10 +237,17 @@ const App: React.FC = () => {
   };
 
   const confirmBet = () => {
-    if (pendingBetUrl) {
+    if (pendingBetUrl && selectedMarket) {
+      // Track bet click
+      trackBetClick(selectedMarket.id, selectedMarket.title);
       window.open(pendingBetUrl, '_blank', 'noopener,noreferrer');
       setPendingBetUrl(null);
     }
+  };
+
+  const handleMarketSelect = (market: MarketAnalysis) => {
+    setSelectedMarket(market);
+    trackMarketView(market.id, market.title);
   };
   
   const timeFilters = [
@@ -541,7 +554,7 @@ const App: React.FC = () => {
                 <MarketCard 
                   key={market.id} 
                   market={market} 
-                  onAnalyze={setSelectedMarket}
+                  onAnalyze={handleMarketSelect}
                   onBet={handleBetClick}
                 />
               ))
@@ -561,9 +574,7 @@ const App: React.FC = () => {
             isOpen={showHistory} 
             onClose={() => setShowHistory(false)}
             initialTab="accuracy"
-            onSelectMarket={(m) => {
-                setSelectedMarket(m);
-            }}
+            onSelectMarket={handleMarketSelect}
         />
 
         <MarketDetailModal 
@@ -577,7 +588,7 @@ const App: React.FC = () => {
             isOpen={showAlerts} 
             onClose={() => setShowAlerts(false)}
             markets={activeMarkets}
-            onMarketClick={setSelectedMarket}
+            onMarketClick={handleMarketSelect}
             onBet={handleBetClick}
         />
 
