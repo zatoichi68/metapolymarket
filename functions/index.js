@@ -18,32 +18,28 @@ const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&ac
 
 /**
  * Helper: Send Email via Nodemailer
- * If SMTP secrets are not available, it logs the email content to console (Dev Mode)
+ * Receives credentials as parameters to work within secret context
  */
-async function sendEmail(to, subject, html) {
-  let transporter;
-  const user = smtpUser.value();
-  const pass = smtpPass.value();
-
+async function sendEmail(to, subject, html, user, pass) {
   if (user && pass) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail', // Can be changed to other providers
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
       auth: { user, pass }
     });
+
+    await transporter.sendMail({
+      from: `"MetaPolymarket" <${user}>`,
+      to,
+      subject,
+      html
+    });
+    console.log(`Email sent to ${to}`);
   } else {
-    console.log('⚠️ SMTP secrets not found. Simulating email send.');
+    console.log('⚠️ SMTP secrets not configured. Simulating email send.');
     console.log(`To: ${to}`);
     console.log(`Subject: ${subject}`);
     console.log(`Body: ${html}`);
-    return;
   }
-
-  await transporter.sendMail({
-    from: '"MetaPolymarket" <noreply@metapolymarket.com>',
-    to,
-    subject,
-    html
-  });
 }
 
 /**
@@ -90,7 +86,9 @@ export const sendPremiumVerificationCode = onRequest({
       createdAt: new Date().toISOString()
     });
 
-    // 3. Send Email
+    // 3. Send Email (pass secrets as parameters)
+    const user = smtpUser.value();
+    const pass = smtpPass.value();
     await sendEmail(
       email,
       'Your MetaPolymarket Verification Code',
@@ -100,7 +98,9 @@ export const sendPremiumVerificationCode = onRequest({
          <h1 style="color: #4F46E5; letter-spacing: 5px;">${code}</h1>
          <p>This code expires in 15 minutes.</p>
          <p>If you didn't request this, please ignore this email.</p>
-       </div>`
+       </div>`,
+      user,
+      pass
     );
 
     res.json({ success: true, message: 'Verification code sent' });
