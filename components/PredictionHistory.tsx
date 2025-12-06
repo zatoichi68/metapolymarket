@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, BarChart3, TrendingUp, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, BarChart3, TrendingUp, Calendar, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { 
   Chart as ChartJS, 
   CategoryScale, 
@@ -23,6 +23,8 @@ ChartJS.register(
 );
 
 import { getResolvedPredictions, BacktestStats } from '../services/historyService';
+
+import { InfoTooltip } from './InfoTooltip';
 
 interface PredictionHistoryProps {
   isOpen: boolean;
@@ -172,19 +174,28 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                   {resolvedData ? (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="bg-slate-800 p-4 rounded-lg text-center">
+                        <div className="bg-slate-800 p-4 rounded-lg text-center relative">
+                          <div className="absolute top-2 right-2">
+                            <InfoTooltip content="Percentage of correct predictions. Note: High accuracy on low odds (favorites) is easier than on high odds (underdogs)." />
+                          </div>
                           <CheckCircle className="mx-auto mb-2 text-green-400" size={32} />
                           <h3 className="text-lg font-bold text-white">Accuracy</h3>
                           <p className="text-2xl font-bold text-green-400">{resolvedData.stats.accuracy.toFixed(1)}%</p>
                           <p className="text-sm text-slate-400">{resolvedData.stats.total} resolved predictions</p>
                         </div>
-                        <div className="bg-slate-800 p-4 rounded-lg text-center">
+                        <div className="bg-slate-800 p-4 rounded-lg text-center relative">
+                          <div className="absolute top-2 right-2">
+                            <InfoTooltip content="Theoretical Return on Investment if betting according to Kelly Criterion recommendations. Reflects optimal bankroll growth." />
+                          </div>
                           <TrendingUp className="mx-auto mb-2 text-emerald-400" size={32} />
                           <h3 className="text-lg font-bold text-white">Kelly ROI</h3>
                           <p className="text-2xl font-bold text-emerald-400">+{resolvedData.stats.kellyROI.toFixed(2)}%</p>
                           <p className="text-sm text-slate-400">Cumulative return</p>
                         </div>
-                        <div className="bg-slate-800 p-4 rounded-lg text-center">
+                        <div className="bg-slate-800 p-4 rounded-lg text-center relative">
+                          <div className="absolute top-2 right-2">
+                             <InfoTooltip content="Measures the accuracy of probabilistic predictions. 0.00 is perfect, 0.25 is random guessing. Lower is better." />
+                          </div>
                           <BarChart3 className="mx-auto mb-2 text-blue-400" size={32} />
                           <h3 className="text-lg font-bold text-white">Brier Score</h3>
                           <p className="text-2xl font-bold text-blue-400">{resolvedData.stats.avgBrier.toFixed(3)}</p>
