@@ -8,7 +8,7 @@ import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
 import { PremiumAccessModal } from './components/PremiumAccessModal';
-import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles } from 'lucide-react';
+import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark } from 'lucide-react';
 
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
@@ -19,6 +19,15 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(Category.ALL);
   const [showContrarian, setShowContrarian] = useState<boolean>(false);
+  const [showFavorites, setShowFavorites] = useState<boolean>(false);
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('metapolymarket_favorites');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
@@ -195,6 +204,9 @@ const App: React.FC = () => {
     const isContrarian = (m.marketProb >= 0.5 && m.aiProb < 0.5) || (m.marketProb < 0.5 && m.aiProb >= 0.5);
     const matchesContrarian = showContrarian ? isContrarian : true;
 
+    // Favorites Filter
+    const matchesFavorites = showFavorites ? favorites.includes(m.id) : true;
+
     // Time Filter
     let matchesTime = true;
     if (timeFilter !== 'all' && m.endDate) {
@@ -211,7 +223,7 @@ const App: React.FC = () => {
         }
     }
 
-    return matchesSearch && matchesCategory && matchesContrarian && matchesTime;
+    return matchesSearch && matchesCategory && matchesContrarian && matchesTime && matchesFavorites;
   }).sort((a, b) => {
     // Sort logic
     switch (sortBy) {
@@ -501,6 +513,19 @@ const App: React.FC = () => {
 
             {/* Right Side: Contrarian & Count */}
             <div className="flex flex-wrap items-center gap-4 xl:justify-end border-t xl:border-t-0 border-slate-800 pt-4 xl:pt-0">
+                {/* Favorites Toggle */}
+                <button
+                    onClick={() => setShowFavorites(!showFavorites)}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide transition-all border ${
+                        showFavorites
+                        ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                    }`}
+                >
+                    <Bookmark size={14} className={showFavorites ? 'fill-amber-400' : ''} />
+                    Favorites {favorites.length > 0 && `(${favorites.length})`}
+                </button>
+
                 {/* Contrarian Toggle */}
                 <button
                     onClick={() => setShowContrarian(!showContrarian)}
@@ -556,6 +581,9 @@ const App: React.FC = () => {
                   market={market} 
                   onAnalyze={handleMarketSelect}
                   onBet={handleBetClick}
+                  onFavoriteToggle={(id, isFav) => {
+                    setFavorites(prev => isFav ? [...prev, id] : prev.filter(f => f !== id));
+                  }}
                 />
               ))
             ) : (
