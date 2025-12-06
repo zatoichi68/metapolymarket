@@ -240,8 +240,8 @@ const App: React.FC = () => {
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                >
-                 <BarChart3 size={16} />  // Change icon to BarChart3 for backtesting focus
-                 <span className="hidden sm:inline">Backtest</span>  // Rename button to "Backtest"
+                 <BarChart3 size={16} />
+                 <span className="hidden sm:inline">Backtest</span>
                </button>
                <button 
                 onClick={() => setShowHowItWorks(true)}
