@@ -111,16 +111,16 @@ export const calculateOverallStats = (history: { date: string; predictions: Pred
 };
 
 /**
- * Fetch historical predictions and resolve them with actual outcomes for backtesting.
- * Joins with resolved markets to compute accuracy and ROI.
+ * Fetch historical predictions that have been resolved.
+ * Now uses the resolved data directly from Firestore (populated by Cloud Functions).
  */
 export const getResolvedPredictions = async (limitCount = 100): Promise<{ predictions: ResolvedPrediction[], stats: BacktestStats } | null> => {
   if (!db) return null;
   
   try {
-    // 1. Get historical predictions (last 30 days for example)
+    // 1. Get historical predictions (last 30 days)
     const historyRef = collection(db, 'prediction_history');
-    const q = query(historyRef, orderBy('date', 'desc'), limit(30)); // Last 30 days
+    const q = query(historyRef, orderBy('date', 'desc'), limit(30)); 
     const snapshot = await getDocs(q);
     
     let allPredictions: PredictionRecord[] = [];
@@ -131,47 +131,51 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
     
     if (allPredictions.length === 0) return null;
     
-    // 2. Get resolved markets
-    const resolvedMarkets = await getResolvedMarkets(100);
-    const marketMap = new Map(resolvedMarkets.map(m => [m.id, m]));
-    
-    // 3. Resolve predictions
+    // 2. Filter for RESOLVED predictions (outcome is 'win' or 'loss')
     const resolvedPredictions: ResolvedPrediction[] = allPredictions
-      .filter(p => p.outcome === 'pending' && p.marketId && marketMap.has(p.marketId))
+      .filter(p => p.outcome === 'win' || p.outcome === 'loss')
       .map(p => {
-        const resolved = marketMap.get(p.marketId)!;
-        const wasCorrect = p.aiPrediction.toLowerCase() === resolved.resolvedOutcome.toLowerCase();
-        const actualProb = resolved.resolvedOutcome === 'Yes' ? 1 : 0;
-        const brierError = Math.pow(p.aiProb - actualProb, 2);
-        const kellyReturn = p.kellyPercentage * (actualProb - p.marketProb) / 100; // Simplified ROI
+        const wasCorrect = p.outcome === 'win';
+        const actualProb = p.outcome === 'win' ? 1 : 0; // Simple approximation
         
-        // Cast PredictionRecord to ResolvedPrediction (which extends MarketAnalysis)
-        // We fill missing MarketAnalysis fields with defaults or existing data
+        // Brier Score calculation
+        // If win: (Prob - 1)^2
+        // If loss: (Prob - 0)^2
+        const brierError = Math.pow(p.aiProb - actualProb, 2);
+        
+        // Calculate Kelly Return (Weighted by Kelly %)
+        // item.roi from backend is the Unit ROI (e.g., 1.0 for doubling money, -1.0 for loss)
+        // Kelly Return = Unit ROI * (Kelly% / 100)
+        const unitRoi = (p as any).roi !== undefined ? (p as any).roi : 0;
+        const kellyReturn = unitRoi * (p.kellyPercentage / 100);
+        
         return {
           ...p,
-          id: p.id, // PredictionRecord has id
-          slug: "", // Missing in PredictionRecord, set default
+          id: p.id, 
+          slug: "", 
           title: p.title,
-          category: "Other", // Missing
-          imageUrl: "", // Missing
+          category: "Other", 
+          imageUrl: "", 
           marketProb: p.marketProb,
           aiProb: p.aiProb,
           edge: p.edge,
-          reasoning: "", // Missing
-          volume: 0, // Missing
-          outcomes: ["Yes", "No"], // Default
+          reasoning: "", 
+          volume: 0, 
+          outcomes: ["Yes", "No"], 
           prediction: p.aiPrediction,
-          confidence: 0, // Missing
+          confidence: 0, 
           kellyPercentage: p.kellyPercentage,
-          riskFactor: "", // Missing
-          resolvedOutcome: resolved.resolvedOutcome as 'Yes' | 'No',
+          riskFactor: "", 
+          resolvedOutcome: (p.resolvedOutcome || (wasCorrect ? p.aiPrediction : 'Other')) as 'Yes' | 'No',
           wasCorrect,
           brierError,
           kellyReturn
         };
       });
     
-    // 4. Calculate stats
+    if (resolvedPredictions.length === 0) return null;
+
+    // 3. Calculate stats
     const stats: BacktestStats = calculateBacktestStats(resolvedPredictions);
     
     return { predictions: resolvedPredictions, stats };
