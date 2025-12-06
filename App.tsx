@@ -41,13 +41,14 @@ const App: React.FC = () => {
 
         if (storedPremium && storedEmail) {
             try {
-                 // Determine API URL (inline logic similar to Modal for simplicity, or could be extracted to a helper)
-                 let apiUrl = '/api/checkPremiumStatus';
+                 // Determine API URL
+                 let apiUrl: string;
                  const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
                  if (import.meta.env.DEV) {
                     apiUrl = `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/checkPremiumStatus`;
                  } else {
-                    apiUrl = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/checkPremiumStatus`;
+                    // Cloud Run URL for Firebase Functions v2
+                    apiUrl = 'https://checkpremiumstatus-krtdefxoka-uc.a.run.app';
                  }
 
                  const response = await fetch(apiUrl, {

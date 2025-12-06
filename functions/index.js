@@ -55,6 +55,7 @@ function generateCode() {
  */
 export const sendPremiumVerificationCode = onRequest({
   cors: true,
+  invoker: 'public',
   secrets: [smtpUser, smtpPass]
 }, async (req, res) => {
   if (req.method !== 'POST') {
@@ -116,7 +117,8 @@ export const sendPremiumVerificationCode = onRequest({
  * Expects body: { email: string, code: string }
  */
 export const validatePremiumCode = onRequest({
-  cors: true
+  cors: true,
+  invoker: 'public'
 }, async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method not allowed');
@@ -172,7 +174,8 @@ export const validatePremiumCode = onRequest({
  * Expects body: { email: string }
  */
 export const checkPremiumStatus = onRequest({
-  cors: true
+  cors: true,
+  invoker: 'public'
 }, async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method not allowed');
