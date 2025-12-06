@@ -12,16 +12,24 @@ interface MarketDetailModalProps {
 export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, isOpen, onClose, onBet }) => {
   if (!isOpen || !market) return null;
 
-  // Calculate crowd probability for the PREDICTED outcome using the universal formula
-  // This works for both binary (Yes/No) AND multi-outcome markets (Apple/Microsoft/Other...)
-  // Edge = aiProb - crowdProb, therefore crowdProb = aiProb - edge
-  const displayMarketProb = market.aiProb - market.edge;
-  const displayAiProb = market.aiProb;
+  // Determine if AI predicted the first outcome or not
+  const isPredictedOutcomeA = market.prediction === market.outcomes[0];
+  
+  // aiProb in the data represents probability for outcomes[0] (first outcome)
+  // We need to display the probability for the PREDICTED outcome
+  const displayAiProb = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
+  
+  // marketProb also represents probability for outcomes[0]
+  // We need the market's probability for the PREDICTED outcome
+  const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
 
   const marketPercent = Math.round(displayMarketProb * 100);
   const aiPercent = Math.round(displayAiProb * 100);
   
-  const isContrarian = market.edge < 0; // Negative edge means AI sees less value than crowd
+  // Calculate edge for the predicted outcome
+  const displayEdge = displayAiProb - displayMarketProb;
+  
+  const isContrarian = displayEdge < 0; // Negative edge means AI sees less value than crowd
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
