@@ -41,22 +41,37 @@ export const savePredictionsToHistory = async (markets: MarketAnalysis[]): Promi
   const today = new Date().toISOString().split('T')[0];
   const historyRef = doc(db, 'prediction_history', today);
 
-  const records: PredictionRecord[] = markets.map(m => ({
-    id: `${today}-${m.id}`,
-    date: today,
-    marketId: m.id,
-    title: m.title,
-    aiPrediction: m.prediction,
-    aiProb: m.aiProb,
-    marketProb: m.marketProb,
-    edge: m.edge,
-    kellyPercentage: m.kellyPercentage || 0,
-    reasoning: m.reasoning,
-    riskFactor: m.riskFactor,
-    confidence: m.confidence,
-    outcomes: m.outcomes,
-    outcome: 'pending' as const
-  }));
+  const records: PredictionRecord[] = markets.map(m => {
+    // Calculate the correct edge for the PREDICTED outcome
+    // marketProb is typically for outcomes[0], so we need to adjust for other outcomes
+    const isPredictionFirstOutcome = m.prediction === m.outcomes[0];
+    
+    // For non-first outcomes, the market probability is (1 - marketProb) for binary markets
+    // This is an approximation for multi-outcome markets
+    const marketProbForPrediction = isPredictionFirstOutcome 
+      ? m.marketProb 
+      : (1 - m.marketProb);
+    
+    // Correct edge = AI probability - Market probability (for the same outcome)
+    const correctedEdge = m.aiProb - marketProbForPrediction;
+    
+    return {
+      id: `${today}-${m.id}`,
+      date: today,
+      marketId: m.id,
+      title: m.title,
+      aiPrediction: m.prediction,
+      aiProb: m.aiProb,
+      marketProb: marketProbForPrediction, // Store the probability for the PREDICTED outcome
+      edge: correctedEdge, // Store the CORRECTED edge
+      kellyPercentage: m.kellyPercentage || 0,
+      reasoning: m.reasoning,
+      riskFactor: m.riskFactor,
+      confidence: m.confidence,
+      outcomes: m.outcomes,
+      outcome: 'pending' as const
+    };
+  });
 
   await setDoc(historyRef, {
     date: today,
