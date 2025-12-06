@@ -15,17 +15,17 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   // Probabilities for Outcome A
   const marketProbA = market.marketProb;
 
-  // Recalculate Edge dynamically to fix potential DB data inconsistency for Contrarian picks
-  // If prediction is A: Edge = AI_Prob(A) - Market_Prob(A)
-  // If prediction is B: Edge = AI_Prob(B) - Market_Prob(B) = AI_Prob(B) - (1 - Market_Prob(A))
-  let calculatedEdge = 0;
-  if (market.prediction === outcomeA) {
-       // AI predicts A. market.aiProb is prob of A.
-       calculatedEdge = market.aiProb - market.marketProb;
-  } else {
-       // AI predicts B. market.aiProb is prob of B.
-       calculatedEdge = market.aiProb - (1 - market.marketProb);
-  }
+  // Calculate Edge for the PREDICTED outcome
+  // aiProb and marketProb are ALWAYS for outcomes[0] (first outcome)
+  // We need to adjust when the prediction is for the second outcome
+  const isPredictedA = market.prediction === outcomeA;
+  
+  // Get probabilities for the predicted outcome
+  const aiProbForPrediction = isPredictedA ? market.aiProb : (1 - market.aiProb);
+  const marketProbForPrediction = isPredictedA ? market.marketProb : (1 - market.marketProb);
+  
+  // Edge = AI's confidence - Market's confidence (for the same outcome)
+  const calculatedEdge = aiProbForPrediction - marketProbForPrediction;
 
   // For displaying edge on Outcome A row (only relevant if A is predicted)
   const edgeA = calculatedEdge; 
@@ -37,7 +37,8 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
 
   const renderRow = (name: string, marketProb: number, edge: number, isPredicted: boolean) => {
     const percentage = Math.round(marketProb * 100);
-    const alpha = (Math.abs(edge) * 100).toFixed(1);
+    const edgePercent = (edge * 100).toFixed(1);
+    const edgeColor = edge >= 0 ? 'text-emerald-400' : 'text-orange-400';
     
     // Determine colors based on prediction status
     const rowBg = isPredicted ? 'bg-white/5' : 'bg-transparent';
@@ -87,10 +88,10 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
                 {isPredicted && (
                     <button
                         onClick={(e) => { e.preventDefault(); onAnalyze(market); }} 
-                        className="text-[10px] font-mono font-bold text-emerald-400 flex items-center hover:underline cursor-pointer"
+                        className={`text-[10px] font-mono font-bold ${edgeColor} flex items-center hover:underline cursor-pointer`}
                         title="View Analysis"
                     >
-                        +{alpha}% <ArrowUpRight size={10} className="ml-px" />
+                        {edge >= 0 ? '+' : ''}{edgePercent}% <ArrowUpRight size={10} className="ml-px" />
                     </button>
                 )}
             </div>
