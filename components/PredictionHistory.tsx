@@ -209,7 +209,15 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                 // Existing history content
                 <div className="space-y-4">
                   {predictions.length > 0 ? (
-                    predictions.map((p, i) => (
+                    predictions.map((p, i) => {
+                        // Adjust probabilities based on which outcome was predicted
+                        // aiProb and marketProb in storage are for outcomes[0]
+                        const isPredictedFirst = p.outcomes?.[0] === p.aiPrediction;
+                        const displayAiProb = isPredictedFirst ? p.aiProb : (1 - p.aiProb);
+                        const displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
+                        const displayEdge = displayAiProb - displayMarketProb;
+                        
+                        return (
                         <div key={i} className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                             <div className="flex-1">
                                 <div className="text-xs text-slate-500 mb-1 font-mono">{p.date}</div>
@@ -219,14 +227,13 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                                     <div>
                                         <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Swarm AI</div>
                                         <div className="font-bold text-purple-400">
-                                            {p.aiPrediction} <span className="text-slate-500 font-normal">({Math.round(p.aiProb * 100)}%)</span>
+                                            {p.aiPrediction} <span className="text-slate-500 font-normal">({Math.round(displayAiProb * 100)}%)</span>
                                         </div>
                                     </div>
                                     <div>
                                         <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Crowd</div>
                                         <div className="font-bold text-blue-400">
-                                            {/* Derive crowd prob from AI prob and Edge to ensure we compare apples to apples */}
-                                            {Math.round((p.aiProb - p.edge) * 100)}% <span className="text-slate-500 font-normal">on {p.aiPrediction}</span>
+                                            {Math.round(displayMarketProb * 100)}% <span className="text-slate-500 font-normal">on {p.aiPrediction}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -235,8 +242,8 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                             <div className="flex items-center gap-4 sm:text-right border-t sm:border-t-0 border-slate-700 pt-3 sm:pt-0 w-full sm:w-auto justify-between sm:justify-end">
                                 <div>
                                     <div className="text-xs text-slate-500 mb-0.5">Edge</div>
-                                    <div className={`font-mono font-bold ${p.edge >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-                                        {p.edge >= 0 ? '+' : ''}{Math.round(p.edge * 1000) / 10}%
+                                    <div className={`font-mono font-bold ${displayEdge >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                        {displayEdge >= 0 ? '+' : ''}{Math.round(displayEdge * 1000) / 10}%
                                     </div>
                                 </div>
                                 
@@ -288,7 +295,7 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                                 )}
                             </div>
                         </div>
-                    ))
+                    )})
                   ) : (
                       <div className="text-center py-12 text-slate-400">
                         <p>No history found.</p>
