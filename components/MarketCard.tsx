@@ -14,11 +14,26 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   
   // Probabilities for Outcome A
   const marketProbA = market.marketProb;
-  const edgeA = market.edge; 
+
+  // Recalculate Edge dynamically to fix potential DB data inconsistency for Contrarian picks
+  // If prediction is A: Edge = AI_Prob(A) - Market_Prob(A)
+  // If prediction is B: Edge = AI_Prob(B) - Market_Prob(B) = AI_Prob(B) - (1 - Market_Prob(A))
+  let calculatedEdge = 0;
+  if (market.prediction === outcomeA) {
+       // AI predicts A. market.aiProb is prob of A.
+       calculatedEdge = market.aiProb - market.marketProb;
+  } else {
+       // AI predicts B. market.aiProb is prob of B.
+       calculatedEdge = market.aiProb - (1 - market.marketProb);
+  }
+
+  // For displaying edge on Outcome A row (only relevant if A is predicted)
+  const edgeA = calculatedEdge; 
 
   // Probabilities for Outcome B (Inverse)
   const marketProbB = 1 - marketProbA;
-  const edgeB = -edgeA; 
+  // For displaying edge on Outcome B row (only relevant if B is predicted)
+  const edgeB = calculatedEdge; 
 
   const renderRow = (name: string, marketProb: number, edge: number, isPredicted: boolean) => {
     const percentage = Math.round(marketProb * 100);
