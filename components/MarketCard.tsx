@@ -1,14 +1,54 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MarketAnalysis } from '../types';
-import { ArrowUpRight, Gift, Bookmark, Sparkles, ExternalLink, BrainCircuit } from 'lucide-react';
+import { ArrowUpRight, Bookmark, Sparkles, ExternalLink, BrainCircuit } from 'lucide-react';
 
 interface MarketCardProps {
   market: MarketAnalysis;
   onAnalyze: (market: MarketAnalysis) => void;
   onBet: (url: string) => void;
+  onFavoriteToggle?: (marketId: string, isFavorite: boolean) => void;
 }
 
-export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet }) => {
+// Helper to get favorites from localStorage
+const getFavorites = (): string[] => {
+  try {
+    const stored = localStorage.getItem('metapolymarket_favorites');
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Helper to save favorites to localStorage
+const saveFavorites = (favorites: string[]) => {
+  localStorage.setItem('metapolymarket_favorites', JSON.stringify(favorites));
+};
+
+export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet, onFavoriteToggle }) => {
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    const favorites = getFavorites();
+    setIsFavorite(favorites.includes(market.id));
+  }, [market.id]);
+
+  const toggleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const favorites = getFavorites();
+    let newFavorites: string[];
+    
+    if (isFavorite) {
+      newFavorites = favorites.filter(id => id !== market.id);
+    } else {
+      newFavorites = [...favorites, market.id];
+    }
+    
+    saveFavorites(newFavorites);
+    setIsFavorite(!isFavorite);
+    onFavoriteToggle?.(market.id, !isFavorite);
+  };
   const outcomeA = market.outcomes[0] || "Yes";
   const outcomeB = market.outcomes[1] || "No";
   
@@ -150,15 +190,25 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
         {renderRow(outcomeB, marketProbB, edgeB, !isAPredicted)}
       </div>
 
-      {/* Footer: Volume & Icons */}
+      {/* Footer: Volume & Favorite */}
       <div className="px-4 py-3 border-t border-slate-800/50 flex items-center justify-between text-slate-500 mt-auto bg-slate-900/20">
          <div className="text-xs font-medium flex items-center gap-1 text-slate-400">
              ${(market.volume / 1000000).toFixed(1)}m Vol.
          </div>
-         <div className="flex gap-3">
-             <Gift size={16} className="hover:text-slate-300 cursor-pointer transition-colors" />
-             <Bookmark size={16} className="hover:text-slate-300 cursor-pointer transition-colors" />
-         </div>
+         <button 
+           onClick={toggleFavorite}
+           className="group/fav"
+           title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+         >
+           <Bookmark 
+             size={18} 
+             className={`transition-all ${
+               isFavorite 
+                 ? 'fill-amber-400 text-amber-400' 
+                 : 'text-slate-500 hover:text-amber-400 group-hover/fav:scale-110'
+             }`} 
+           />
+         </button>
       </div>
 
     </div>
