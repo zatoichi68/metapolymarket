@@ -1,6 +1,7 @@
 import { db } from './firebase';
 import { collection, getDocs, query, orderBy, limit, doc, setDoc } from 'firebase/firestore';
-import { MarketAnalysis } from '../types';
+import { MarketAnalysis, ResolvedPrediction, BacktestStats } from '../types';
+import { getResolvedMarkets } from './polymarketService';
 
 export interface PredictionRecord {
   id: string;
@@ -113,7 +114,7 @@ export const calculateOverallStats = (history: { date: string; predictions: Pred
  * Fetch historical predictions and resolve them with actual outcomes for backtesting.
  * Joins with resolved markets to compute accuracy and ROI.
  */
-export const getResolvedPredictions = async (limit = 100): Promise<{ predictions: ResolvedPrediction[], stats: BacktestStats } | null> => {
+export const getResolvedPredictions = async (limitCount = 100): Promise<{ predictions: ResolvedPrediction[], stats: BacktestStats } | null> => {
   if (!db) return null;
   
   try {
@@ -131,12 +132,7 @@ export const getResolvedPredictions = async (limit = 100): Promise<{ predictions
     if (allPredictions.length === 0) return null;
     
     // 2. Get resolved markets
-    // Assuming getResolvedMarkets is defined elsewhere and returns MarketAnalysis[]
-    // For the purpose of this edit, we'll assume it's available in the scope.
-    // If not, this function would need to be imported or defined.
-    // For now, we'll mock it or assume it's available.
-    // In a real scenario, getResolvedMarkets would be defined in a separate file.
-    const resolvedMarkets = await getResolvedMarkets(50); // Placeholder for getResolvedMarkets
+    const resolvedMarkets = await getResolvedMarkets(100);
     const marketMap = new Map(resolvedMarkets.map(m => [m.id, m]));
     
     // 3. Resolve predictions
@@ -149,9 +145,26 @@ export const getResolvedPredictions = async (limit = 100): Promise<{ predictions
         const brierError = Math.pow(p.aiProb - actualProb, 2);
         const kellyReturn = p.kellyPercentage * (actualProb - p.marketProb) / 100; // Simplified ROI
         
+        // Cast PredictionRecord to ResolvedPrediction (which extends MarketAnalysis)
+        // We fill missing MarketAnalysis fields with defaults or existing data
         return {
           ...p,
-          resolvedOutcome: resolved.resolvedOutcome,
+          id: p.id, // PredictionRecord has id
+          slug: "", // Missing in PredictionRecord, set default
+          title: p.title,
+          category: "Other", // Missing
+          imageUrl: "", // Missing
+          marketProb: p.marketProb,
+          aiProb: p.aiProb,
+          edge: p.edge,
+          reasoning: "", // Missing
+          volume: 0, // Missing
+          outcomes: ["Yes", "No"], // Default
+          prediction: p.aiPrediction,
+          confidence: 0, // Missing
+          kellyPercentage: p.kellyPercentage,
+          riskFactor: "", // Missing
+          resolvedOutcome: resolved.resolvedOutcome as 'Yes' | 'No',
           wasCorrect,
           brierError,
           kellyReturn
@@ -196,7 +209,10 @@ export const calculateBacktestStats = (resolved: ResolvedPrediction[]): Backtest
   // Over time (group by date)
   const overTime = Array.from(
     resolved.reduce((acc, p) => {
-      acc.set(p.date, (acc.get(p.date) || 0) + 1);
+      // Assuming p.date exists on ResolvedPrediction (via PredictionRecord)
+      // Use a default date if missing to be safe
+      const date = (p as any).date || new Date().toISOString().split('T')[0];
+      acc.set(date, (acc.get(date) || 0) + 1);
       return acc;
     }, new Map<string, number>())
   ).sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }));
@@ -211,25 +227,3 @@ export const calculateBacktestStats = (resolved: ResolvedPrediction[]): Backtest
     overTime
   };
 };
-
-// Types (add if not exist)
-interface ResolvedPrediction extends PredictionRecord {
-  resolvedOutcome: 'Yes' | 'No';
-  wasCorrect: boolean;
-  brierError: number;
-  kellyReturn: number;
-}
-
-interface BacktestStats {
-  total: number;
-  accuracy: number;
-  brierScore: number;
-  avgBrier: number;
-  kellyROI: number;
-  winRate: number;
-  overTime: { date: string; count: number }[];
-}
-
-
-
-
