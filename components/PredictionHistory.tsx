@@ -210,21 +210,15 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                 <div className="space-y-4">
                   {predictions.length > 0 ? (
                     predictions.map((p, i) => {
-                        // Adjust probabilities based on which outcome was predicted
-                        // aiProb and marketProb in storage are for outcomes[0]
+                        // Use the edge from backend directly - it's already calculated correctly
+                        // This avoids issues with inconsistent outcomes order
+                        const displayEdge = p.edge || 0;
+                        
+                        // For display: derive AI and Market prob from edge
+                        // If edge is positive, AI sees more value than crowd
                         const isPredictedFirst = p.outcomes?.[0] === p.aiPrediction;
-                        let displayAiProb = isPredictedFirst ? p.aiProb : (1 - p.aiProb);
-                        let displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
-                        
-                        // Sanity check: if AI prob is very low but stored edge is positive,
-                        // the outcomes order is likely wrong - swap calculation
-                        const storedEdge = p.edge || 0;
-                        if (displayAiProb < 0.1 && storedEdge > 0) {
-                            displayAiProb = isPredictedFirst ? (1 - p.aiProb) : p.aiProb;
-                            displayMarketProb = isPredictedFirst ? (1 - p.marketProb) : p.marketProb;
-                        }
-                        
-                        const displayEdge = displayAiProb - displayMarketProb;
+                        const displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
+                        const displayAiProb = displayMarketProb + displayEdge;
                         
                         return (
                         <div key={i} className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
