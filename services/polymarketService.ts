@@ -7,15 +7,22 @@ import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 
 // Providing a key (e.g. via headers) can sometimes help with rate limits, 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
-const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
+const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false';
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_URL = `${PROXY_URL}${encodeURIComponent(BASE_API_URL)}`;
+
+// In-memory cache (client-side) to throttle Polymarket fetch + AI analyses
+const MARKET_CACHE_TTL_MS = 30_000; // 30s
+let marketCache: { data: MarketAnalysis[]; fetchedAt: number } | null = null;
 
 /**
  * Fetches fresh data from Polymarket and runs AI analysis.
  * (This is the expensive operation we want to minimize)
  */
 const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
+  if (marketCache && Date.now() - marketCache.fetchedAt < MARKET_CACHE_TTL_MS) {
+    return marketCache.data;
+  }
   try {
     const response = await fetch(API_URL);
     if (!response.ok) {
@@ -95,7 +102,9 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
         }
     });
 
-    return analyzedMarkets.filter((item): item is MarketAnalysis => item !== null);
+    const filtered = analyzedMarkets.filter((item): item is MarketAnalysis => item !== null);
+    marketCache = { data: filtered, fetchedAt: Date.now() };
+    return filtered;
 
   } catch (error) {
     console.error("Failed to fetch Polymarket data.", error);
