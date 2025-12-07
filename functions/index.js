@@ -25,7 +25,7 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',  // Dev
 ];
 
-const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
+const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false';
 
 /**
  * Helper: Send Email via Nodemailer
