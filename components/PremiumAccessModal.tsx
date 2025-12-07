@@ -19,6 +19,17 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Referral code from URL (e.g., ?ref=METAPMLT)
+  const referralCode = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref') || params.get('referral');
+      return ref || undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+
   // Retrieve Project ID from env vars (same as firebase.ts)
   const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
   
@@ -53,7 +64,7 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, referralCode }),
       });
 
       const data = await response.json();
@@ -92,7 +103,7 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, code, referralCode }),
       });
 
       const data = await response.json();
