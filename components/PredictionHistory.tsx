@@ -375,7 +375,16 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                               <tr key={i} className="border-t border-slate-800 hover:bg-slate-800/50">
                                 <td className="p-3">{p.date}</td>
                                 <td className="p-3">{p.title}</td>
-                                <td className="p-3">{p.aiPrediction} ({(p.aiProb * 100).toFixed(1)}%)</td>
+                                {(() => {
+                                  const predictedProb = p.aiPrediction === (p as any).outcomes?.[0]
+                                    ? p.aiProb
+                                    : 1 - p.aiProb;
+                                  return (
+                                    <td className="p-3">
+                                      {p.aiPrediction} ({(predictedProb * 100).toFixed(1)}%)
+                                    </td>
+                                  );
+                                })()}
                                 <td className="p-3">{p.resolvedOutcome}</td>
                                 <td className={p.wasCorrect ? 'p-3 text-green-400' : 'p-3 text-red-400'}>
                                   {p.wasCorrect ? 'Yes' : 'No'}
