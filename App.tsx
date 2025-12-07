@@ -29,7 +29,7 @@ const App: React.FC = () => {
     }
   });
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
-  const [statusFilter, setStatusFilter] = useState<string>('active'); // 'active', 'resolved'
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'active', 'resolved'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
   const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
@@ -226,13 +226,15 @@ const App: React.FC = () => {
 
     // Status Filter (active vs resolved)
     let matchesStatus = true;
-    if (m.endDate) {
-        const isResolved = new Date(m.endDate).getTime() < Date.now();
-        if (statusFilter === 'active') matchesStatus = !isResolved;
-        else if (statusFilter === 'resolved') matchesStatus = isResolved;
-    } else {
-        // No end date = assume active
-        matchesStatus = statusFilter === 'active';
+    if (statusFilter !== 'all') {
+        if (m.endDate) {
+            const isResolved = new Date(m.endDate).getTime() < Date.now();
+            if (statusFilter === 'active') matchesStatus = !isResolved;
+            else if (statusFilter === 'resolved') matchesStatus = isResolved;
+        } else {
+            // No end date = assume active
+            matchesStatus = statusFilter === 'active';
+        }
     }
 
     return matchesSearch && matchesCategory && matchesContrarian && matchesTime && matchesFavorites && matchesStatus;
@@ -295,6 +297,7 @@ const App: React.FC = () => {
   ];
 
   const statusFilters = [
+    { id: 'all', label: 'All' },
     { id: 'active', label: 'Active' },
     { id: 'resolved', label: 'Resolved' },
   ];
