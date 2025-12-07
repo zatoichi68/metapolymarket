@@ -87,7 +87,7 @@ export const sendPremiumVerificationCode = onRequest({
     return;
   }
 
-  const { email } = req.body;
+  const { email, referralCode } = req.body;
   if (!email || !email.includes('@')) {
     res.status(400).json({ success: false, error: 'Invalid email address' });
     return;
@@ -108,7 +108,8 @@ export const sendPremiumVerificationCode = onRequest({
     await db.collection('premium_verifications').doc(email).set({
       code,
       expiresAt,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      referralCode: referralCode || null
     });
 
     // 3. Send Email (pass secrets as parameters)
@@ -153,7 +154,7 @@ export const validatePremiumCode = onRequest({
     return;
   }
 
-  const { email, code } = req.body;
+  const { email, code, referralCode } = req.body;
 
   try {
     // 1. Get stored code
@@ -178,12 +179,35 @@ export const validatePremiumCode = onRequest({
       return;
     }
 
-    // 3. Mark user as verified in persistent collection
+    // 3. Determine plan (referral capped to first 420)
+    let plan = 'free_trial';
+    let referralSlot = null;
+    if (referralCode === 'METAPMLT') {
+      const refDocRef = db.collection('referral_meta').doc('METAPMLT');
+      const result = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(refDocRef);
+        const used = snap.exists ? (snap.data().used || 0) : 0;
+        const limit = snap.exists ? (snap.data().limit || 420) : 420;
+        if (used >= limit) {
+          return { allowed: false };
+        }
+        tx.set(refDocRef, { used: used + 1, limit }, { merge: true });
+        return { allowed: true, slot: used + 1 };
+      });
+      if (result.allowed) {
+        plan = 'premium_referral';
+        referralSlot = result.slot || null;
+      }
+    }
+
+    // 4. Mark user as verified in persistent collection
     await db.collection('premium_users').doc(email).set({
       email,
       verified: true,
       joinedAt: new Date().toISOString(),
-      plan: 'free_trial' // "Free for a limited time" logic
+      plan,
+      referralCode: referralCode || null,
+      referralSlot
     });
 
     // 4. Clean up verification doc
