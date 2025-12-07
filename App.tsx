@@ -325,7 +325,8 @@ const App: React.FC = () => {
   const statusFilters = [
     { id: 'all', label: 'All' },
     { id: 'active', label: 'Active' },
-    { id: 'resolved', label: 'Resolved' },
+    // "Resolved" here means end date passée (marché terminé), pas l'issue officielle
+    { id: 'resolved', label: 'Ended (by date)' },
   ];
 
   const sortOptions = [
