@@ -13,6 +13,8 @@ const db = getFirestore();
 const openrouterApiKey = defineSecret('OPENROUTER_API_KEY');
 const smtpUser = defineSecret('SMTP_USER');
 const smtpPass = defineSecret('SMTP_PASS');
+const smtpFrom = defineSecret('SMTP_FROM');
+const smtpFromName = defineSecret('SMTP_FROM_NAME');
 
 // CORS Configuration - Restrict to allowed origins
 const ALLOWED_ORIGINS = [
@@ -35,11 +37,11 @@ const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&ac
  * Helper: Send Email via Nodemailer
  * Receives credentials as parameters to work within secret context
  */
-async function sendEmail(to, subject, html, user, pass) {
+async function sendEmail(to, subject, html, user, pass, fromAddress, fromName) {
   if (user && pass) {
     // Use a validated Brevo sender if provided, fallback to auth user
-    const fromAddress = process.env.SMTP_FROM || user;
-    const fromName = process.env.SMTP_FROM_NAME || 'MetaPolymarket';
+    const sender = fromAddress || user;
+    const senderName = fromName || 'MetaPolymarket';
 
     const transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
@@ -49,8 +51,8 @@ async function sendEmail(to, subject, html, user, pass) {
     });
 
     await transporter.sendMail({
-      from: `"${fromName}" <${fromAddress}>`,
-      replyTo: fromAddress,
+      from: `"${senderName}" <${sender}>`,
+      replyTo: sender,
       to,
       subject,
       html
@@ -78,7 +80,7 @@ function generateCode() {
 export const sendPremiumVerificationCode = onRequest({
   cors: ALLOWED_ORIGINS,
   invoker: 'public',
-  secrets: [smtpUser, smtpPass]
+  secrets: [smtpUser, smtpPass, smtpFrom, smtpFromName]
 }, async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method not allowed');
@@ -112,6 +114,8 @@ export const sendPremiumVerificationCode = onRequest({
     // 3. Send Email (pass secrets as parameters)
     const user = smtpUser.value();
     const pass = smtpPass.value();
+    const fromAddr = smtpFrom.value();
+    const fromName = smtpFromName.value();
     await sendEmail(
       email,
       'Your MetaPolymarket Verification Code',
@@ -123,7 +127,9 @@ export const sendPremiumVerificationCode = onRequest({
          <p>If you didn't request this, please ignore this email.</p>
        </div>`,
       user,
-      pass
+      pass,
+      fromAddr,
+      fromName
     );
 
     res.json({ success: true, message: 'Verification code sent' });
