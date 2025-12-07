@@ -85,7 +85,7 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                         
                         <h3 
                           className="text-white font-medium mb-2 cursor-pointer hover:text-blue-400 transition-colors"
-                          onClick={() => { onClose(); onMarketClick(market); }}
+                          onClick={() => { onMarketClick(market); }}
                         >
                           {market.title}
                         </h3>
