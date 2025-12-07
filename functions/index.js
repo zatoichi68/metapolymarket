@@ -38,7 +38,9 @@ const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&ac
 async function sendEmail(to, subject, html, user, pass) {
   if (user && pass) {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
       auth: { user, pass }
     });
 
