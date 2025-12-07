@@ -61,8 +61,16 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   const isPredictedA = market.prediction === outcomeA;
   
   // Get probabilities for the predicted outcome
-  const aiProbForPrediction = isPredictedA ? market.aiProb : (1 - market.aiProb);
-  const marketProbForPrediction = isPredictedA ? market.marketProb : (1 - market.marketProb);
+  let aiProbForPrediction = isPredictedA ? market.aiProb : (1 - market.aiProb);
+  let marketProbForPrediction = isPredictedA ? market.marketProb : (1 - market.marketProb);
+  
+  // Sanity check: if AI prob is very low but stored edge is positive,
+  // the outcomes order is likely wrong - swap calculation
+  const storedEdge = market.edge || 0;
+  if (aiProbForPrediction < 0.1 && storedEdge > 0) {
+    aiProbForPrediction = isPredictedA ? (1 - market.aiProb) : market.aiProb;
+    marketProbForPrediction = isPredictedA ? (1 - market.marketProb) : market.marketProb;
+  }
   
   // Edge = AI's confidence - Market's confidence (for the same outcome)
   const calculatedEdge = aiProbForPrediction - marketProbForPrediction;
