@@ -11,6 +11,16 @@ const PORT = process.env.PORT || 8080;
 // Middleware pour parser le JSON (limite la taille pour éviter les abus)
 app.use(express.json({ limit: '50kb' }));
 
+// Sécurité basique : headers
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('X-XSS-Protection', '0');
+  next();
+});
+
 // Clé API OpenRouter sécurisée côté serveur uniquement
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '';
 // Token simple pour protéger /api/analyze (à définir dans l'env : API_AUTH_TOKEN)
@@ -18,7 +28,7 @@ const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || '';
 
 // Rate-limit minimaliste en mémoire pour /api/analyze
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX = 60; // requêtes par minute par IP
+const RATE_LIMIT_MAX = 30; // requêtes par minute par IP
 const rateBuckets = new Map();
 
 const hitRateLimit = (ip) => {
@@ -44,6 +54,13 @@ const makeCacheKey = ({ title, outcomes, marketProb, volume }) =>
 // Route proxy backend pour Polymarket (évite corsproxy.io)
 app.get('/api/polymarket/events', async (req, res) => {
   try {
+    if (!API_AUTH_TOKEN) {
+      return res.status(503).json({ error: 'API auth token not configured' });
+    }
+    if (req.headers['x-api-key'] !== API_AUTH_TOKEN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     // Rate limit léger
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
     if (hitRateLimit(ip)) {
@@ -90,6 +107,10 @@ app.get('/api/polymarket/events', async (req, res) => {
 app.post('/api/analyze', async (req, res) => {
   if (!OPENROUTER_API_KEY) {
     return res.status(503).json({ error: 'AI service unavailable - OPENROUTER_API_KEY not configured' });
+  }
+
+  if (!API_AUTH_TOKEN) {
+    return res.status(503).json({ error: 'API auth token not configured' });
   }
 
   // Auth simple via en-tête x-api-key
