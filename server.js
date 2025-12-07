@@ -8,11 +8,27 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware pour parser le JSON
-app.use(express.json());
+// Middleware pour parser le JSON (limite la taille pour éviter les abus)
+app.use(express.json({ limit: '50kb' }));
 
 // Clé API OpenRouter sécurisée côté serveur uniquement
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '';
+// Token simple pour protéger /api/analyze (à définir dans l'env : API_AUTH_TOKEN)
+const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || '';
+
+// Rate-limit minimaliste en mémoire pour /api/analyze
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 60; // requêtes par minute par IP
+const rateBuckets = new Map();
+
+const hitRateLimit = (ip) => {
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip) || [];
+  const recent = bucket.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  recent.push(now);
+  rateBuckets.set(ip, recent);
+  return recent.length > RATE_LIMIT_MAX;
+};
 
 // Cache en mémoire pour limiter les appels OpenRouter sur des marchés inchangés
 const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
@@ -27,11 +43,38 @@ app.post('/api/analyze', async (req, res) => {
     return res.status(503).json({ error: 'AI service unavailable - OPENROUTER_API_KEY not configured' });
   }
 
+  // Auth simple via en-tête x-api-key
+  if (API_AUTH_TOKEN && req.headers['x-api-key'] !== API_AUTH_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Rate limit basique par IP
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  if (hitRateLimit(ip)) {
+    return res.status(429).json({ error: 'Rate limit exceeded' });
+  }
+
   try {
     const { title, outcomes, marketProb, volume } = req.body;
     
     if (!title || !outcomes || marketProb === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Validation basique des entrées
+    if (typeof title !== 'string' || title.length > 280) {
+      return res.status(400).json({ error: 'Invalid title' });
+    }
+    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.some(o => typeof o !== 'string')) {
+      return res.status(400).json({ error: 'Invalid outcomes' });
+    }
+    const probNum = Number(marketProb);
+    if (Number.isNaN(probNum) || probNum < 0 || probNum > 1) {
+      return res.status(400).json({ error: 'Invalid marketProb' });
+    }
+    const volumeNum = volume !== undefined ? Number(volume) : 0;
+    if (Number.isNaN(volumeNum) || volumeNum < 0) {
+      return res.status(400).json({ error: 'Invalid volume' });
     }
 
     const outcomeA = outcomes[0];
