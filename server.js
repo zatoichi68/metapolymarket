@@ -1,6 +1,7 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fetch from 'node-fetch';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,12 +31,61 @@ const hitRateLimit = (ip) => {
   return recent.length > RATE_LIMIT_MAX;
 };
 
+// Cache Polymarket côté serveur
+const POLY_CACHE_TTL_MS = 30 * 1000;
+let polyCache = { data: null, expiresAt: 0 };
+
 // Cache en mémoire pour limiter les appels OpenRouter sur des marchés inchangés
 const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const analysisCache = new Map();
 
 const makeCacheKey = ({ title, outcomes, marketProb, volume }) =>
   `${title}__${(outcomes || []).join('|')}__${Number(marketProb).toFixed(4)}__${Number(volume || 0).toFixed(2)}`;
+
+// Route proxy backend pour Polymarket (évite corsproxy.io)
+app.get('/api/polymarket/events', async (req, res) => {
+  try {
+    // Rate limit léger
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    if (hitRateLimit(ip)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+
+    // Cache 30s
+    if (polyCache.data && polyCache.expiresAt > Date.now()) {
+      return res.json(polyCache.data);
+    }
+
+    const limitParam = Math.min(Number(req.query.limit) || 200, 200);
+    const url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=true&closed=false&order=volume24hr&ascending=false`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'metapolymarket/1.0' },
+      signal: controller.signal
+    }).catch((e) => {
+      if (e.name === 'AbortError') {
+        return null;
+      }
+      throw e;
+    });
+
+    clearTimeout(timeout);
+
+    if (!resp || !resp.ok) {
+      return res.status(503).json({ error: 'Polymarket upstream error' });
+    }
+
+    const data = await resp.json();
+    polyCache = { data, expiresAt: Date.now() + POLY_CACHE_TTL_MS };
+    res.json(data);
+  } catch (error) {
+    console.error('Polymarket fetch failed:', error);
+    res.status(503).json({ error: 'Polymarket fetch failed' });
+  }
+});
 
 // Route API pour l'analyse AI (protège la clé OpenRouter)
 app.post('/api/analyze', async (req, res) => {
