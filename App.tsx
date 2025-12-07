@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyMarkets, getHourlyMarkets } from './services/polymarketService';
-import { savePredictionsToHistory } from './services/historyService';
+import { savePredictionsToHistory, getFavoritedMarketsFromHistory } from './services/historyService';
 import { trackPageView, trackPremiumSignup, trackMarketView, trackBetClick } from './services/firebase';
 import { PredictionHistory } from './components/PredictionHistory';
 import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
@@ -43,6 +43,20 @@ const App: React.FC = () => {
     return localStorage.getItem('metapolymarket_premium') === 'true';
   });
   const [dataSource, setDataSource] = useState<'daily' | 'hourly'>('daily');
+  const [historicalFavorites, setHistoricalFavorites] = useState<MarketAnalysis[]>([]);
+
+  // Fetch favorited markets from history when favorites change
+  useEffect(() => {
+    const fetchHistoricalFavorites = async () => {
+      if (favorites.length > 0) {
+        const histFavs = await getFavoritedMarketsFromHistory(favorites);
+        setHistoricalFavorites(histFavs);
+      } else {
+        setHistoricalFavorites([]);
+      }
+    };
+    fetchHistoricalFavorites();
+  }, [favorites]);
 
   // Backend verification of premium status on mount
   useEffect(() => {
@@ -189,7 +203,19 @@ const App: React.FC = () => {
     }).replace(',', '');
   };
 
-  const filteredMarkets = activeMarkets.filter(m => {
+  // When favorites filter is on, merge current markets with historical favorites
+  const marketsToFilter = React.useMemo(() => {
+    if (showFavorites && historicalFavorites.length > 0) {
+      // Get IDs of current markets
+      const currentIds = new Set(activeMarkets.map(m => m.id));
+      // Add historical favorites that aren't in current markets
+      const missingFavorites = historicalFavorites.filter(hf => !currentIds.has(hf.id));
+      return [...activeMarkets, ...missingFavorites];
+    }
+    return activeMarkets;
+  }, [activeMarkets, historicalFavorites, showFavorites]);
+
+  const filteredMarkets = marketsToFilter.filter(m => {
     // Search Filter
     const matchesSearch = searchQuery === '' 
       ? true 

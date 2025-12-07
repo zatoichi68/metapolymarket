@@ -92,6 +92,55 @@ export const getPredictionHistory = async (days: number = 7): Promise<{ date: st
 };
 
 /**
+ * Get favorited markets from prediction history
+ * Converts PredictionRecord to MarketAnalysis format
+ */
+export const getFavoritedMarketsFromHistory = async (favoriteIds: string[]): Promise<MarketAnalysis[]> => {
+  if (!db || favoriteIds.length === 0) return [];
+
+  try {
+    // Get last 30 days of history to find favorited markets
+    const history = await getPredictionHistory(30);
+    const allPredictions = history.flatMap(h => h.predictions);
+    
+    // Find predictions that match favorite IDs
+    const favoritePredictions = allPredictions.filter(p => favoriteIds.includes(p.marketId));
+    
+    // Remove duplicates (keep most recent)
+    const uniqueMap = new Map<string, PredictionRecord>();
+    favoritePredictions.forEach(p => {
+      if (!uniqueMap.has(p.marketId) || p.date > uniqueMap.get(p.marketId)!.date) {
+        uniqueMap.set(p.marketId, p);
+      }
+    });
+
+    // Convert to MarketAnalysis format
+    return Array.from(uniqueMap.values()).map(p => ({
+      id: p.marketId,
+      slug: p.slug || p.marketId,
+      title: p.title,
+      category: 'Other',
+      imageUrl: '',
+      marketProb: p.marketProb,
+      aiProb: p.aiProb,
+      edge: p.edge,
+      reasoning: p.reasoning || 'Historical prediction',
+      volume: 0,
+      outcomes: p.outcomes || ['Yes', 'No'],
+      prediction: p.aiPrediction,
+      confidence: p.confidence || 5,
+      kellyPercentage: p.kellyPercentage,
+      riskFactor: p.riskFactor || 'N/A',
+      endDate: p.resolvedAt || '',
+      isFromHistory: true // Flag to identify historical markets
+    } as MarketAnalysis & { isFromHistory?: boolean }));
+  } catch (error) {
+    console.error('Error fetching favorited markets from history:', error);
+    return [];
+  }
+};
+
+/**
  * Calculate overall stats from history
  */
 export const calculateOverallStats = (history: { date: string; predictions: PredictionRecord[]; stats: any }[]): {
