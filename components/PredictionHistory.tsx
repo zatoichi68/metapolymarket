@@ -276,11 +276,11 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                                                 // Pass data directly - modal will calculate crowdProb = aiProb - edge
                                                 const market: MarketAnalysis = {
                                                     id: p.marketId,
-                                                    slug: "",
+                                                    slug: p.slug || p.marketId, // Use stored slug or fallback to marketId
                                                     title: p.title,
                                                     category: "Unknown",
                                                     imageUrl: "",
-                                                    marketProb: p.marketProb, // Original value, modal ignores this now
+                                                    marketProb: p.marketProb,
                                                     aiProb: p.aiProb,
                                                     edge: p.edge,
                                                     reasoning: p.reasoning || "Detailed analysis for this historical prediction was not archived.",

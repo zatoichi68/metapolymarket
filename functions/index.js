@@ -452,12 +452,17 @@ async function saveToFirestore(markets) {
     id: `${today}-${m.id}`,
     date: today,
     marketId: m.id,
+    slug: m.slug || '',        // Store slug for Polymarket URL
     title: m.title,
     aiPrediction: m.prediction,
     aiProb: m.aiProb,
     marketProb: m.marketProb,
     edge: m.edge,
     kellyPercentage: m.kellyPercentage || 0,
+    reasoning: m.reasoning,
+    riskFactor: m.riskFactor,
+    confidence: m.confidence,
+    outcomes: m.outcomes,
     outcome: 'pending'
   }));
 
@@ -523,17 +528,22 @@ async function saveToHourlyFirestore(markets) {
           console.log(`Found ${newMarkets.length} NEW markets in hourly update. Merging to history...`);
           
           const newPredictions = newMarkets.map(m => ({
-            id: `${today}-${m.id}`, // Ensure unique ID structure
+            id: `${today}-${m.id}`,
             date: today,
             marketId: m.id,
+            slug: m.slug || '',        // Store slug for Polymarket URL
             title: m.title,
             aiPrediction: m.prediction,
             aiProb: m.aiProb,
             marketProb: m.marketProb,
             edge: m.edge,
             kellyPercentage: m.kellyPercentage || 0,
+            reasoning: m.reasoning,
+            riskFactor: m.riskFactor,
+            confidence: m.confidence,
+            outcomes: m.outcomes,
             outcome: 'pending',
-            source: 'hourly' // Optional: tag source
+            source: 'hourly'
           }));
 
           const updatedPredictions = [...existingPredictions, ...newPredictions];

@@ -7,16 +7,17 @@ export interface PredictionRecord {
   id: string;
   date: string;
   marketId: string;
+  slug?: string;          // Added for Polymarket URL
   title: string;
   aiPrediction: string;
   aiProb: number;
   marketProb: number;
   edge: number;
   kellyPercentage: number;
-  reasoning?: string;     // Added
-  riskFactor?: string;    // Added
-  confidence?: number;    // Added
-  outcomes?: string[];    // Added
+  reasoning?: string;
+  riskFactor?: string;
+  confidence?: number;
+  outcomes?: string[];
   outcome?: 'pending' | 'correct' | 'incorrect' | 'win' | 'loss';
   resolvedAt?: string;
   resolvedOutcome?: string;
@@ -46,6 +47,7 @@ export const savePredictionsToHistory = async (markets: MarketAnalysis[]): Promi
     id: `${today}-${m.id}`,
     date: today,
     marketId: m.id,
+    slug: m.slug,               // Store slug for Polymarket URL
     title: m.title,
     aiPrediction: m.prediction,
     aiProb: m.aiProb,           // Raw: probability for outcomes[0]
