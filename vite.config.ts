@@ -6,6 +6,10 @@ import type { Plugin } from 'vite';
 // Plugin pour gérer /api/analyze en développement
 function apiPlugin(): Plugin {
   let geminiApiKey: string;
+  const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+  const analysisCache = new Map<string, { data: any; expiresAt: number }>();
+  const makeCacheKey = ({ title, outcomes, marketProb, volume }: { title: string; outcomes: string[]; marketProb: number; volume?: number }) =>
+    `${title}__${(outcomes || []).join('|')}__${Number(marketProb).toFixed(4)}__${Number(volume || 0).toFixed(2)}`;
 
     return {
     name: 'api-plugin',
@@ -44,6 +48,14 @@ function apiPlugin(): Plugin {
           const outcomeA = outcomes[0];
           const outcomeB = outcomes[1] || "Other";
           const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
+          const cacheKey = makeCacheKey({ title, outcomes, marketProb, volume });
+          const cached = analysisCache.get(cacheKey);
+          if (cached && cached.expiresAt > Date.now()) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(cached.data));
+            return;
+          }
 
           const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
@@ -119,9 +131,7 @@ Critical rules for aiProbability:
           const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
           const parsed = JSON.parse(cleanText);
 
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({
+          const payload = {
             aiProbability: parsed.aiProbability ?? marketProb,
             prediction: parsed.prediction ?? outcomeA,
             reasoning: parsed.reasoning ?? "Analysis based on market trends.",
@@ -129,7 +139,13 @@ Critical rules for aiProbability:
             kellyPercentage: parsed.kellyPercentage ?? 0,
             confidence: parsed.confidence ?? 5,
             riskFactor: parsed.riskFactor ?? "Market volatility"
-          }));
+          };
+
+          analysisCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS });
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(payload));
 
         } catch (error) {
           console.error('API error:', error);
