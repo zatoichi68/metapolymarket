@@ -316,17 +316,20 @@ async function fetchAndAnalyzeMarkets(apiKey) {
       if (isNaN(prob) || prob <= 0.01 || prob >= 0.99) continue;
 
       let outcomes = ["Yes", "No"];
-      if (market.outcomes) {
+      
+      // For grouped markets (multi-outcome like "Which movie will win?"),
+      // ALWAYS use [groupItemTitle, "Other"] to ensure prices[0] aligns with outcomes[0]
+      // prices[0] is always the probability of the specific option winning
+      if (market.groupItemTitle) {
+        outcomes = [market.groupItemTitle, "Other"];
+      } else if (market.outcomes) {
+        // For regular binary markets, use the provided outcomes
         const parsedOutcomes = typeof market.outcomes === 'string'
           ? JSON.parse(market.outcomes)
           : market.outcomes;
         if (Array.isArray(parsedOutcomes) && parsedOutcomes.length >= 2) {
           outcomes = parsedOutcomes;
         }
-      }
-
-      if (market.groupItemTitle && outcomes[0] === "Yes") {
-        outcomes = [market.groupItemTitle, "Other"];
       }
 
       marketsToAnalyze.push({ event, market, prob, outcomes });
