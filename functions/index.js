@@ -20,9 +20,13 @@ const ALLOWED_ORIGINS = [
   'https://www.metapolymarket.com',
   'https://metapolymarket.web.app',
   'https://metapolymarket.firebaseapp.com',
+  // Cloud Run container origin (frontend)
+  'https://metapolymarket-140799832958.us-east5.run.app',
   /^https:\/\/metapolymarket--.*\.web\.app$/,  // Firebase preview channels
   'http://localhost:3000',  // Dev
   'http://127.0.0.1:3000',  // Dev
+  'http://localhost:4173',   // Dev Vite
+  'http://127.0.0.1:4173',   // Dev Vite
 ];
 
 const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false';
