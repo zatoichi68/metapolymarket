@@ -32,9 +32,6 @@ export interface MarketAnalysis {
   kellyPercentage: number; // Kelly criterion: optimal bet size as % of bankroll
   riskFactor: string; // Principal risk factor that could invalidate the prediction
   endDate?: string;
-  // Optional resolution info (when coming from history/backtest)
-  resolvedOutcome?: string;
-  wasCorrect?: boolean;
 }
 
 export interface ResolvedMarket {
