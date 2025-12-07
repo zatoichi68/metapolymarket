@@ -7,9 +7,7 @@ import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 
 // Providing a key (e.g. via headers) can sometimes help with rate limits, 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
-const BASE_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false';
-const PROXY_URL = 'https://corsproxy.io/?';
-const API_URL = `${PROXY_URL}${encodeURIComponent(BASE_API_URL)}`;
+const API_URL = '/api/polymarket/events?limit=200';
 
 // In-memory cache (client-side) to throttle Polymarket fetch + AI analyses
 const MARKET_CACHE_TTL_MS = 30_000; // 30s
