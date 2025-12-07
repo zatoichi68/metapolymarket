@@ -3,67 +3,61 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Collection daily_picks - Cache des analyses quotidiennes
+    // Collection daily_picks - Cache des analyses quotidiennes (PUBLIC)
     match /daily_picks/{dateKey} {
-      // Lecture autorisée pour tous (données publiques)
       allow read: if true;
-      
-      // Écriture autorisée seulement si:
-      // 1. Le document n'existe pas encore (création uniquement)
-      // 2. La clé est une date valide (format YYYY-MM-DD)
-      // 3. Les données contiennent les champs requis
       allow create: if isValidDateKey(dateKey)
                     && request.resource.data.keys().hasAll(['date', 'markets', 'updatedAt'])
                     && request.resource.data.date == dateKey
                     && request.resource.data.markets is list;
-      
-      // Pas de mise à jour ni suppression (cache immuable pour la journée)
       allow update, delete: if false;
     }
 
-    // Collection prediction_history - Historique des prédictions
+    // Collection prediction_history - Historique des prédictions (PUBLIC)
     match /prediction_history/{dateKey} {
-      // Lecture autorisée pour tous
       allow read: if true;
-      
-      // Écriture autorisée pour créer/mettre à jour les prédictions du jour
       allow create, update: if isValidDateKey(dateKey)
                             && request.resource.data.keys().hasAll(['date', 'predictions', 'stats', 'createdAt'])
                             && request.resource.data.date == dateKey;
-      
       allow delete: if false;
     }
 
-    // Collection hourly_picks - Mises à jour horaires (Premium)
+    // Collection hourly_picks - Mises à jour horaires (PUBLIC - filtrage côté client)
     match /hourly_picks/{hourKey} {
-      // Lecture autorisée pour tous (le filtrage premium se fait côté client)
       allow read: if true;
-      
-      // Écriture autorisée pour créer les analyses horaires
       allow create: if isValidHourKey(hourKey)
                     && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt'])
                     && request.resource.data.hour == hourKey
                     && request.resource.data.markets is list;
-      
-      // Mise à jour autorisée (rafraîchissement)
       allow update: if isValidHourKey(hourKey)
                     && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt']);
-      
       allow delete: if false;
     }
+
+    // ===== COLLECTIONS SENSIBLES - ACCÈS BACKEND UNIQUEMENT =====
     
-    // Bloquer tout le reste
+    // Collection premium_users - Données utilisateurs (PROTÉGÉ)
+    // Seul le backend (Admin SDK) peut lire/écrire
+    match /premium_users/{email} {
+      allow read, write: if false;
+    }
+
+    // Collection premium_verifications - Codes de vérification (PROTÉGÉ)
+    // Seul le backend (Admin SDK) peut lire/écrire
+    match /premium_verifications/{email} {
+      allow read, write: if false;
+    }
+    
+    // Bloquer tout le reste par défaut
     match /{document=**} {
       allow read, write: if false;
     }
   }
   
-  // Fonction pour valider le format de date YYYY-MM-DD
   function isValidDateKey(key) {
     return key.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
   }
 
-  // Fonction pour valider le format horaire YYYY-MM-DD-HH
   function isValidHourKey(key) {
     return key.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}$');
   }
