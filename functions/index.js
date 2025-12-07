@@ -37,6 +37,10 @@ const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=200&ac
  */
 async function sendEmail(to, subject, html, user, pass) {
   if (user && pass) {
+    // Use a validated Brevo sender if provided, fallback to auth user
+    const fromAddress = process.env.SMTP_FROM || user;
+    const fromName = process.env.SMTP_FROM_NAME || 'MetaPolymarket';
+
     const transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
       port: 587,
@@ -45,7 +49,8 @@ async function sendEmail(to, subject, html, user, pass) {
     });
 
     await transporter.sendMail({
-      from: `"MetaPolymarket" <${user}>`,
+      from: `"${fromName}" <${fromAddress}>`,
+      replyTo: fromAddress,
       to,
       subject,
       html
