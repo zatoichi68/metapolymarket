@@ -196,10 +196,12 @@ export const validatePremiumCode = onRequest({
         tx.set(refDocRef, { used: used + 1, limit }, { merge: true });
         return { allowed: true, slot: used + 1 };
       });
-      if (result.allowed) {
-        plan = 'premium_referral';
-        referralSlot = result.slot || null;
+      if (!result.allowed) {
+        res.status(400).json({ success: false, error: 'Referral limit reached' });
+        return;
       }
+      plan = 'premium_referral';
+      referralSlot = result.slot || null;
     }
 
     // 4. Mark user as verified in persistent collection
