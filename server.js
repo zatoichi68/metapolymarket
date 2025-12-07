@@ -14,6 +14,13 @@ app.use(express.json());
 // Clé API OpenRouter sécurisée côté serveur uniquement
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '';
 
+// Cache en mémoire pour limiter les appels OpenRouter sur des marchés inchangés
+const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const analysisCache = new Map();
+
+const makeCacheKey = ({ title, outcomes, marketProb, volume }) =>
+  `${title}__${(outcomes || []).join('|')}__${Number(marketProb).toFixed(4)}__${Number(volume || 0).toFixed(2)}`;
+
 // Route API pour l'analyse AI (protège la clé OpenRouter)
 app.post('/api/analyze', async (req, res) => {
   if (!OPENROUTER_API_KEY) {
@@ -31,6 +38,13 @@ app.post('/api/analyze', async (req, res) => {
     const outcomeB = outcomes[1] || "Other";
     const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Retour cache si données récentes pour ce marché (titre, outcomes, probas, volume)
+    const cacheKey = makeCacheKey({ title, outcomes, marketProb, volume });
+    const cached = analysisCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.json(cached.data);
+    }
     
     const prompt = `Model: x-ai/grok-4.1-fast. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
 
@@ -98,7 +112,7 @@ Critical rules for aiProbability:
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleanText);
     
-    res.json({
+    const payload = {
       aiProbability: parsed.aiProbability ?? marketProb,
       prediction: parsed.prediction ?? outcomeA,
       reasoning: parsed.reasoning ?? "Analysis based on market trends.",
@@ -106,7 +120,10 @@ Critical rules for aiProbability:
       kellyPercentage: parsed.kellyPercentage ?? 0,
       confidence: parsed.confidence ?? 5,
       riskFactor: parsed.riskFactor ?? "Market volatility"
-    });
+    };
+
+    analysisCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS });
+    res.json(payload);
 
   } catch (error) {
     console.error('AI Analysis error:', error);
