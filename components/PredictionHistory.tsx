@@ -213,8 +213,17 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                         // Adjust probabilities based on which outcome was predicted
                         // aiProb and marketProb in storage are for outcomes[0]
                         const isPredictedFirst = p.outcomes?.[0] === p.aiPrediction;
-                        const displayAiProb = isPredictedFirst ? p.aiProb : (1 - p.aiProb);
-                        const displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
+                        let displayAiProb = isPredictedFirst ? p.aiProb : (1 - p.aiProb);
+                        let displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
+                        
+                        // Sanity check: if AI prob is very low but stored edge is positive,
+                        // the outcomes order is likely wrong - swap calculation
+                        const storedEdge = p.edge || 0;
+                        if (displayAiProb < 0.1 && storedEdge > 0) {
+                            displayAiProb = isPredictedFirst ? (1 - p.aiProb) : p.aiProb;
+                            displayMarketProb = isPredictedFirst ? (1 - p.marketProb) : p.marketProb;
+                        }
+                        
                         const displayEdge = displayAiProb - displayMarketProb;
                         
                         return (
