@@ -17,11 +17,20 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
   
   // aiProb in the data represents probability for outcomes[0] (first outcome)
   // We need to display the probability for the PREDICTED outcome
-  const displayAiProb = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
+  let displayAiProb = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
   
   // marketProb also represents probability for outcomes[0]
   // We need the market's probability for the PREDICTED outcome
-  const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
+  let displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
+
+  // Sanity check: if displayAiProb is very low (<10%) but edge is positive,
+  // the outcomes order might be wrong - try the inverse calculation
+  const rawEdge = market.edge || 0;
+  if (displayAiProb < 0.1 && rawEdge > 0) {
+    // Likely wrong outcome order - swap the calculation
+    displayAiProb = isPredictedOutcomeA ? (1 - market.aiProb) : market.aiProb;
+    displayMarketProb = isPredictedOutcomeA ? (1 - market.marketProb) : market.marketProb;
+  }
 
   const marketPercent = Math.round(displayMarketProb * 100);
   const aiPercent = Math.round(displayAiProb * 100);
