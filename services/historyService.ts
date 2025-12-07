@@ -192,49 +192,63 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
     });
     
     if (allPredictions.length === 0) return null;
-    
-    // 2. Filter for RESOLVED predictions (outcome is 'win' or 'loss')
+
+    // 2. Fetch resolved markets from Polymarket and map by marketId
+    const resolvedMarkets = await getResolvedMarkets(limitCount);
+    const resolvedMap = new Map<string, string>();
+    resolvedMarkets.forEach(m => {
+      if (m.id && m.resolvedOutcome) {
+        resolvedMap.set(m.id, m.resolvedOutcome);
+      }
+    });
+
+    // 3. Build resolved predictions with proper probability alignment
     const resolvedPredictions: ResolvedPrediction[] = allPredictions
-      .filter(p => p.outcome === 'win' || p.outcome === 'loss')
       .map(p => {
-        const wasCorrect = p.outcome === 'win';
-        const actualProb = p.outcome === 'win' ? 1 : 0; // Simple approximation
-        
-        // Brier Score calculation
-        // If win: (Prob - 1)^2
-        // If loss: (Prob - 0)^2
-        const brierError = Math.pow(p.aiProb - actualProb, 2);
-        
-        // Calculate Kelly Return (Weighted by Kelly %)
-        // item.roi from backend is the Unit ROI (e.g., 1.0 for doubling money, -1.0 for loss)
-        // Kelly Return = Unit ROI * (Kelly% / 100)
-        const unitRoi = (p as any).roi !== undefined ? (p as any).roi : 0;
-        const kellyReturn = unitRoi * (p.kellyPercentage / 100);
-        
+        const outcomes = p.outcomes || ['Yes', 'No'];
+        const resolvedOutcome = (resolvedMap.get(p.marketId) || p.resolvedOutcome || '').toString();
+        if (!resolvedOutcome) return null;
+
+        const predictedOutcome = p.aiPrediction || outcomes[0];
+        const isPredFirst = predictedOutcome === outcomes[0];
+
+        // aiProb stocke la probabilité de outcomes[0]; si on a prédit outcomes[1], on inverse
+        const predictedProb = isPredFirst ? p.aiProb : 1 - p.aiProb;
+        const actualProb = resolvedOutcome === predictedOutcome ? 1 : 0;
+
+        const brierError = Math.pow(predictedProb - actualProb, 2);
+
+        // ROI simple binaire: +1 si win, -1 si loss (faute de payout précis); pondéré par Kelly%
+        const wasCorrect = actualProb === 1;
+        const unitRoi = wasCorrect ? 1 : -1;
+        const kellyPct = p.kellyPercentage || 0;
+        const kellyReturn = unitRoi * (kellyPct / 100);
+
         return {
           ...p,
-          id: p.id, 
-          slug: "", 
+          id: p.id,
+          slug: "",
           title: p.title,
-          category: "Other", 
-          imageUrl: "", 
+          category: "Other",
+          imageUrl: "",
           marketProb: p.marketProb,
           aiProb: p.aiProb,
           edge: p.edge,
-          reasoning: p.reasoning || "Analysis details not archived for this prediction.", 
-          volume: 0, 
-          outcomes: p.outcomes || ["Yes", "No"], 
-          prediction: p.aiPrediction,
-          confidence: p.confidence || 0, 
-          kellyPercentage: p.kellyPercentage,
-          riskFactor: p.riskFactor || "Risk factor not archived.", 
-          resolvedOutcome: (p.resolvedOutcome || (wasCorrect ? p.aiPrediction : 'Other')) as 'Yes' | 'No',
+          reasoning: p.reasoning || "Analysis details not archived for this prediction.",
+          volume: 0,
+          outcomes,
+          prediction: predictedOutcome,
+          confidence: p.confidence || 0,
+          kellyPercentage: kellyPct,
+          riskFactor: p.riskFactor || "Risk factor not archived.",
+          resolvedOutcome: resolvedOutcome as 'Yes' | 'No' | string,
           wasCorrect,
           brierError,
           kellyReturn
         };
-      });
-    
+      })
+      .filter((p): p is ResolvedPrediction => p !== null);
+
     if (resolvedPredictions.length === 0) return null;
 
     // 3. Calculate stats
