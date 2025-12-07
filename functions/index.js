@@ -245,15 +245,19 @@ Internal Reasoning Process:
 4. BET DECISION - Compare your probability to market odds. Calculate Kelly Criterion: Kelly% = (b*p - q) / b where b = decimal odds - 1, p = your probability, q = 1-p.
 
 Return a JSON object with these exact fields:
-- aiProbability: number between 0.0 and 1.0 (probability that "${outcomeA}" wins - the FIRST outcome listed)
-- prediction: string (one of the provided outcomes - your bet choice, the outcome you recommend betting ON)
-- reasoning: string (2-3 sentences: summary of Data/Sentiment/Contrarian conflict and key reasoning)
+- aiProbability: number between 0.0 and 1.0 - MUST be the probability for "${outcomeA}" ONLY
+- prediction: string (one of: "${outcomeA}" or "${outcomeB}" - the outcome you recommend betting ON)
+- reasoning: string (2-3 sentences explaining your edge vs the market)
 - category: string (one of: Politics, Crypto, Sports, Business, Other)
 - kellyPercentage: number between 0 and 100 (optimal % of bankroll, 0 if no edge)
 - confidence: number between 1 and 10 (confidence level)
 - riskFactor: string (main risk factor that could invalidate the prediction)
 
-IMPORTANT: aiProbability must be the probability for "${outcomeA}" (first outcome), regardless of which outcome you predict.
+CRITICAL RULES FOR aiProbability:
+- aiProbability is ALWAYS the probability for "${outcomeA}" (the first outcome), NOT your predicted outcome.
+- Example: If you predict "${outcomeB}" with 80% confidence, then aiProbability = 0.20 (because ${outcomeA} has 20% chance).
+- Example: If you predict "${outcomeA}" with 70% confidence, then aiProbability = 0.70.
+- The reasoning should mention the probability of your PREDICTED outcome (e.g., "70% true probability for ${outcomeB}").
 
 Respond ONLY with valid JSON, no markdown.`;
 
