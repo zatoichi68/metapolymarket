@@ -55,7 +55,7 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   // Probabilities for Outcome A
   const marketProbA = market.marketProb;
 
-  // Resolution info (if provided)
+  // Resolution info (if provided) - not used currently
   const resolvedOutcome = market.resolvedOutcome;
   const wasCorrect = typeof market.wasCorrect === 'boolean'
     ? market.wasCorrect
@@ -162,14 +162,6 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
 
   return (
     <div className="bg-poly-card border border-slate-700/60 rounded-xl overflow-hidden shadow-lg hover:border-slate-600 hover:shadow-2xl transition-all duration-300 flex flex-col h-full group relative">
-      
-      {/* Resolved badge */}
-      {resolvedOutcome && (
-        <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border
-          ${wasCorrect ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60' : 'bg-rose-500/15 text-rose-300 border-rose-400/50'}`}>
-          Resolved · {wasCorrect ? 'AI Win' : 'AI Lost'}
-        </div>
-      )}
       
       {/* Header Area */}
       <div className="p-4 pb-2">
