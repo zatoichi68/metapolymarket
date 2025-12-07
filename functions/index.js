@@ -180,9 +180,11 @@ export const validatePremiumCode = onRequest({
     }
 
     // 3. Determine plan (referral capped to first 420)
+    const effectiveReferral = referralCode || data.referralCode || null;
+
     let plan = 'free_trial';
     let referralSlot = null;
-    if (referralCode === 'METAPMLT') {
+    if (effectiveReferral === 'METAPMLT') {
       const refDocRef = db.collection('referral_meta').doc('METAPMLT');
       const result = await db.runTransaction(async (tx) => {
         const snap = await tx.get(refDocRef);
@@ -206,7 +208,7 @@ export const validatePremiumCode = onRequest({
       verified: true,
       joinedAt: new Date().toISOString(),
       plan,
-      referralCode: referralCode || null,
+      referralCode: effectiveReferral,
       referralSlot
     });
 
