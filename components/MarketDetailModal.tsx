@@ -34,7 +34,8 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
   const marketPercent = Math.round(displayMarketProb * 100);
   const aiPercent = Math.round(displayAiProb * 100);
   
-  const isContrarian = displayEdge < 0; // Negative edge means AI sees less value than crowd
+  // High-edge contrarian opportunity: AI sees significantly more value than the crowd
+  const isHighEdgeOpportunity = displayEdge > 0.05; // Edge > 5%
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -130,16 +131,22 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
                 <div className="bg-slate-800/30 rounded-lg p-4 border-l-2 border-purple-500 text-slate-300 text-base leading-relaxed">
                     "{market.reasoning}"
                 </div>
-                {isContrarian && (
-                    <div className="mt-3 text-xs text-yellow-500/80 flex items-center gap-1.5 bg-yellow-500/5 p-2 rounded border border-yellow-500/10">
+                {isHighEdgeOpportunity && (
+                    <div className="mt-3 text-xs text-emerald-500/80 flex items-center gap-1.5 bg-emerald-500/5 p-2 rounded border border-emerald-500/10">
                         <TrendingUp size={12} />
-                        High-Edge Contrarian Opportunity detected.
+                        High-Edge Opportunity detected (+{(displayEdge * 100).toFixed(1)}% alpha).
+                    </div>
+                )}
+                {displayEdge < -0.05 && (
+                    <div className="mt-3 text-xs text-orange-500/80 flex items-center gap-1.5 bg-orange-500/5 p-2 rounded border border-orange-500/10">
+                        <TrendingUp size={12} className="rotate-180" />
+                        AI sees less value than the crowd ({(displayEdge * 100).toFixed(1)}% edge).
                     </div>
                 )}
             </div>
 
-            {/* Kelly Criterion */}
-            {market.kellyPercentage > 0 && (
+            {/* Kelly Criterion - only show if edge is positive */}
+            {market.kellyPercentage > 0 && displayEdge > 0 && (
               <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 border border-amber-500/30">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
