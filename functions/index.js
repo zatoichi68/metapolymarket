@@ -675,6 +675,13 @@ export const hourlyRefresh = onSchedule({
   console.log('Starting hourly market refresh (premium)...');
   
   try {
+    // Skip the 06:00 UTC run (1AM ET) because daily refresh runs then.
+    const currentUtcHour = new Date().getUTCHours();
+    if (currentUtcHour === 6) {
+      console.log('Skipping hourly refresh at 06:00 UTC to avoid overlap with daily.');
+      return;
+    }
+
     const apiKey = openrouterApiKey.value();
     if (!apiKey) {
       throw new Error('OPENROUTER_API_KEY not configured');
