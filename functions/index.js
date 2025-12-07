@@ -14,6 +14,17 @@ const openrouterApiKey = defineSecret('OPENROUTER_API_KEY');
 const smtpUser = defineSecret('SMTP_USER');
 const smtpPass = defineSecret('SMTP_PASS');
 
+// CORS Configuration - Restrict to allowed origins
+const ALLOWED_ORIGINS = [
+  'https://metapolymarket.com',
+  'https://www.metapolymarket.com',
+  'https://metapolymarket.web.app',
+  'https://metapolymarket.firebaseapp.com',
+  /^https:\/\/metapolymarket--.*\.web\.app$/,  // Firebase preview channels
+  'http://localhost:3000',  // Dev
+  'http://127.0.0.1:3000',  // Dev
+];
+
 const POLYMARKET_API_URL = 'https://gamma-api.polymarket.com/events?limit=100&active=true&closed=false&order=volume24hr&ascending=false';
 
 /**
@@ -54,7 +65,7 @@ function generateCode() {
  * Expects body: { email: string }
  */
 export const sendPremiumVerificationCode = onRequest({
-  cors: true,
+  cors: ALLOWED_ORIGINS,
   invoker: 'public',
   secrets: [smtpUser, smtpPass]
 }, async (req, res) => {
@@ -117,7 +128,7 @@ export const sendPremiumVerificationCode = onRequest({
  * Expects body: { email: string, code: string }
  */
 export const validatePremiumCode = onRequest({
-  cors: true,
+  cors: ALLOWED_ORIGINS,
   invoker: 'public'
 }, async (req, res) => {
   if (req.method !== 'POST') {
@@ -174,7 +185,7 @@ export const validatePremiumCode = onRequest({
  * Expects body: { email: string }
  */
 export const checkPremiumStatus = onRequest({
-  cors: true,
+  cors: ALLOWED_ORIGINS,
   invoker: 'public'
 }, async (req, res) => {
   if (req.method !== 'POST') {
@@ -587,7 +598,7 @@ export const manualRefresh = onRequest({
   secrets: [openrouterApiKey],
   timeoutSeconds: 540,
   memory: '1GiB',
-  cors: true
+  cors: ALLOWED_ORIGINS
 }, async (req, res) => {
   // Allow GET and POST for easy testing
   if (req.method !== 'POST' && req.method !== 'GET') {
@@ -835,7 +846,7 @@ export const checkResolutions = onSchedule({
  * HTTP Trigger for manual resolution check
  */
 export const manualResolution = onRequest({
-    cors: true,
+    cors: ALLOWED_ORIGINS,
     invoker: 'public'
 }, async (req, res) => {
     try {
