@@ -260,9 +260,11 @@ const App: React.FC = () => {
   };
 
   const confirmBet = () => {
-    if (pendingBetUrl && selectedMarket) {
-      // Track bet click
-      trackBetClick(selectedMarket.id, selectedMarket.title);
+    if (pendingBetUrl) {
+      // Track bet click if we have market info
+      if (selectedMarket) {
+        trackBetClick(selectedMarket.id, selectedMarket.title);
+      }
       window.open(pendingBetUrl, '_blank', 'noopener,noreferrer');
       setPendingBetUrl(null);
     }
