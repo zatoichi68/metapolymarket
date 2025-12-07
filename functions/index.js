@@ -619,6 +619,14 @@ export const manualRefresh = onRequest({
     return;
   }
 
+  // Auth simple par en-tête ou query (API_AUTH_TOKEN)
+  const apiToken = process.env.API_AUTH_TOKEN || '';
+  const providedToken = req.headers['x-api-key'] || req.query.token;
+  if (apiToken && providedToken !== apiToken) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return;
+  }
+
   const refreshType = req.query.type || 'daily'; // 'daily' or 'hourly'
   console.log(`Starting manual ${refreshType} market refresh...`);
   
