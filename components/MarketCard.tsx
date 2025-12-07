@@ -56,24 +56,12 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   const marketProbA = market.marketProb;
 
   // Calculate Edge for the PREDICTED outcome
-  // aiProb and marketProb are ALWAYS for outcomes[0] (first outcome)
-  // We need to adjust when the prediction is for the second outcome
+  // The backend already calculates the edge correctly, so use it directly
+  // This avoids issues with inconsistent outcomes order
   const isPredictedA = market.prediction === outcomeA;
   
-  // Get probabilities for the predicted outcome
-  let aiProbForPrediction = isPredictedA ? market.aiProb : (1 - market.aiProb);
-  let marketProbForPrediction = isPredictedA ? market.marketProb : (1 - market.marketProb);
-  
-  // Sanity check: if AI prob is very low but stored edge is positive,
-  // the outcomes order is likely wrong - swap calculation
-  const storedEdge = market.edge || 0;
-  if (aiProbForPrediction < 0.1 && storedEdge > 0) {
-    aiProbForPrediction = isPredictedA ? (1 - market.aiProb) : market.aiProb;
-    marketProbForPrediction = isPredictedA ? (1 - market.marketProb) : market.marketProb;
-  }
-  
-  // Edge = AI's confidence - Market's confidence (for the same outcome)
-  const calculatedEdge = aiProbForPrediction - marketProbForPrediction;
+  // Use the edge from backend directly - it's already calculated correctly
+  const calculatedEdge = market.edge || 0;
 
   // For displaying edge on Outcome A row (only relevant if A is predicted)
   const edgeA = calculatedEdge; 
