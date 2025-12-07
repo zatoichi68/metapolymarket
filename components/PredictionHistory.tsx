@@ -210,15 +210,21 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                 <div className="space-y-4">
                   {predictions.length > 0 ? (
                     predictions.map((p, i) => {
-                        // Use the edge from backend directly - it's already calculated correctly
-                        // This avoids issues with inconsistent outcomes order
-                        const displayEdge = p.edge || 0;
-                        
-                        // For display: derive AI and Market prob from edge
-                        // If edge is positive, AI sees more value than crowd
+                        // Calculate probabilities for the predicted outcome
                         const isPredictedFirst = p.outcomes?.[0] === p.aiPrediction;
                         const displayMarketProb = isPredictedFirst ? p.marketProb : (1 - p.marketProb);
-                        const displayAiProb = displayMarketProb + displayEdge;
+                        
+                        // Validate backend edge: AI prob = marketProb + edge must be between 0 and 1
+                        let displayEdge = p.edge || 0;
+                        const impliedAiProb = displayMarketProb + displayEdge;
+                        
+                        if (impliedAiProb < 0 || impliedAiProb > 1) {
+                            // Backend edge is invalid - recalculate from aiProb
+                            const aiProbForPrediction = isPredictedFirst ? p.aiProb : (1 - p.aiProb);
+                            displayEdge = aiProbForPrediction - displayMarketProb;
+                        }
+                        
+                        const displayAiProb = Math.min(1, Math.max(0, displayMarketProb + displayEdge));
                         
                         return (
                         <div key={i} className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">

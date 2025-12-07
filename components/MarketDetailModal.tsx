@@ -12,16 +12,23 @@ interface MarketDetailModalProps {
 export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, isOpen, onClose, onBet }) => {
   if (!isOpen || !market) return null;
 
-  // Use the edge from backend directly - it's already calculated correctly
-  const displayEdge = market.edge || 0;
-  
   // Determine if AI predicted the first outcome
   const isPredictedOutcomeA = market.prediction === market.outcomes[0];
   
   // Calculate market probability for the predicted outcome
   const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
   
-  // Derive AI probability from market prob + edge
+  // Validate backend edge: AI prob = marketProb + edge must be between 0 and 1
+  let displayEdge = market.edge || 0;
+  const impliedAiProb = displayMarketProb + displayEdge;
+  
+  if (impliedAiProb < 0 || impliedAiProb > 1) {
+    // Backend edge is invalid - recalculate from aiProb
+    const aiProbForPrediction = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
+    displayEdge = aiProbForPrediction - displayMarketProb;
+  }
+  
+  // Calculate AI probability
   const displayAiProb = Math.min(1, Math.max(0, displayMarketProb + displayEdge));
 
   const marketPercent = Math.round(displayMarketProb * 100);
