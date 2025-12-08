@@ -55,7 +55,21 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
           ) : (
             <div className="space-y-4">
               {highEdgeMarkets.map((market) => {
-                const edgePercent = Math.abs(market.edge) * 100;
+                // Normalize probabilities to the predicted outcome (align with MarketDetailModal)
+                const isPredictedOutcomeA = market.prediction === market.outcomes[0];
+                const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
+
+                let displayEdge = market.edge || 0;
+                const impliedAiProb = displayMarketProb + displayEdge;
+
+                if (impliedAiProb < 0 || impliedAiProb > 1) {
+                  const aiProbForPrediction = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
+                  displayEdge = aiProbForPrediction - displayMarketProb;
+                }
+
+                const displayAiProb = Math.min(1, Math.max(0, displayMarketProb + displayEdge));
+
+                const edgePercent = Math.abs(displayEdge) * 100;
                 const isHot = edgePercent >= 15;
                 
                 return (
@@ -97,9 +111,9 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                           </div>
                           <div className="flex items-center gap-1.5 text-slate-400">
                             <TrendingUp size={14} />
-                            <span className="text-purple-400 font-mono">{Math.round(market.aiProb * 100)}%</span>
+                            <span className="text-purple-400 font-mono">{Math.round(displayAiProb * 100)}%</span>
                             vs
-                            <span className="text-blue-400 font-mono">{Math.round(market.marketProb * 100)}%</span>
+                            <span className="text-blue-400 font-mono">{Math.round(displayMarketProb * 100)}%</span>
                           </div>
                         </div>
                       </div>
