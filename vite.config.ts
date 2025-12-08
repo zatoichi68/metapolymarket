@@ -6,6 +6,7 @@ import type { Plugin } from 'vite';
 // Plugin pour gérer /api/analyze en développement
 function apiPlugin(): Plugin {
   let geminiApiKey: string;
+  let envRef: Record<string, string>;
   const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
   const analysisCache = new Map<string, { data: any; expiresAt: number }>();
   const makeCacheKey = ({ title, outcomes, marketProb, volume }: { title: string; outcomes: string[]; marketProb: number; volume?: number }) =>
@@ -15,8 +16,8 @@ function apiPlugin(): Plugin {
     name: 'api-plugin',
     configResolved(config) {
       // Charger la clé depuis .env (OPENROUTER_API_KEY) - jamais hardcodée !
-      const env = loadEnv(config.mode, process.cwd(), '');
-      geminiApiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+      envRef = loadEnv(config.mode, process.cwd(), '');
+      geminiApiKey = envRef.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
       if (!geminiApiKey) {
         console.warn('⚠️  OPENROUTER_API_KEY not found in .env - AI analysis will fail');
       }
@@ -25,8 +26,8 @@ function apiPlugin(): Plugin {
       // Dev handler for /api/polymarket/events -> hits production backend with API key
       server.middlewares.use('/api/polymarket/events', async (req, res) => {
         try {
-          const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-          const token = env.VITE_API_AUTH_TOKEN || process.env.VITE_API_AUTH_TOKEN || '';
+          const apiKey = envRef?.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+          const token = envRef?.VITE_API_AUTH_TOKEN || process.env.VITE_API_AUTH_TOKEN || '';
           if (!token) {
             res.statusCode = 503;
             res.setHeader('Content-Type', 'application/json');
@@ -34,7 +35,7 @@ function apiPlugin(): Plugin {
             return;
           }
           // Forward to the deployed backend to simplify local dev
-          const base = env.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL || 'https://metapolymarket-140799832958.us-east5.run.app';
+          const base = envRef?.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL || 'https://metapolymarket-140799832958.us-east5.run.app';
           const targetUrl = `${base}${req.originalUrl || req.url}`;
           const upstream = await fetch(targetUrl, {
             headers: {
