@@ -385,8 +385,6 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
   console.log(`Prepared ${marketsToAnalyze.length} markets for analysis`);
 
-  // Process in parallel batches (very small to limit 429 on free tier)
-  const BATCH_SIZE = 2;
   const MAX_RETRIES = 4;
   const RETRY_DELAY_MS = 1000; // base delay (ms) with jitter
 
@@ -407,102 +405,77 @@ async function fetchAndAnalyzeMarkets(apiKey) {
       }
     }
   };
+  // Sequential processing to avoid 429 on free tier
   const analyzedMarkets = [];
   let successCount = 0;
   let errorCount = 0;
 
-  for (let i = 0; i < marketsToAnalyze.length; i += BATCH_SIZE) {
-    const batch = marketsToAnalyze.slice(i, i + BATCH_SIZE);
-    console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(marketsToAnalyze.length / BATCH_SIZE)} (${batch.length} markets)`);
+  for (const { event, market, prob, outcomes } of marketsToAnalyze) {
+    try {
+      const analysis = await runAnalysisWithRetry([
+        event.title,
+        outcomes,
+        prob,
+        parseFloat(market.volume || "0"),
+        apiKey
+      ]);
 
-    const batchPromises = batch.map(async ({ event, market, prob, outcomes }) => {
-      try {
-        const analysis = await runAnalysisWithRetry([
-          event.title,
-          outcomes,
-          prob,
-          parseFloat(market.volume || "0"),
-          apiKey
-        ]);
-
-        const aiProb = analysis.aiProbability ?? prob;
-        const prediction = analysis.prediction ?? outcomes[0];
-        
-        // Calculate edge correctly based on which outcome is predicted
-        // aiProb is ALWAYS for outcomes[0] (first outcome)
-        // If predicting outcomes[0]: edge = aiProb - prob
-        // If predicting outcomes[1]: edge = (1 - aiProb) - (1 - prob) = prob - aiProb
-        let calculatedEdge = 0;
-        if (prediction === outcomes[0]) {
-          calculatedEdge = aiProb - prob;
-        } else {
-          // For second outcome, both AI and market probs need to be inverted
-          calculatedEdge = (1 - aiProb) - (1 - prob);
-        }
-
-        return {
-          success: true,
-          data: {
-            id: event.id,
-            slug: event.slug || "",
-            title: event.title,
-            category: analysis.category ?? "Other",
-            imageUrl: event.image,
-            marketProb: prob,
-            aiProb,
-            edge: calculatedEdge,
-            reasoning: analysis.reasoning ?? "Analysis based on market trends.",
-            volume: parseFloat(market.volume || "0"),
-            outcomes,
-            prediction,
-            confidence: analysis.confidence ?? 5,
-            kellyPercentage: analysis.kellyPercentage ?? 0,
-            riskFactor: analysis.riskFactor ?? "Market volatility",
-            endDate: event.endDate
-          }
-        };
-      } catch (error) {
-        console.error(`Error analyzing ${event.title}:`, error.message);
-        // Keep market even without AI analysis (fallback to market odds)
-        return {
-          success: true,
-          data: {
-            id: event.id,
-            slug: event.slug || "",
-            title: event.title,
-            category: "Other",
-            imageUrl: event.image,
-            marketProb: prob,
-            aiProb: prob,
-            edge: 0,
-            reasoning: "AI unavailable, using market odds.",
-            volume: parseFloat(market.volume || "0"),
-            outcomes,
-            prediction: outcomes[0],
-            confidence: 3,
-            kellyPercentage: 0,
-            riskFactor: "Model throttled/unavailable",
-            endDate: event.endDate,
-            fallback: true
-          }
-        };
-      }
-    });
-
-    const results = await Promise.all(batchPromises);
-    
-    for (const result of results) {
-      if (result.success) {
-        analyzedMarkets.push(result.data);
-        successCount++;
+      const aiProb = analysis.aiProbability ?? prob;
+      const prediction = analysis.prediction ?? outcomes[0];
+      
+      // Calculate edge correctly based on which outcome is predicted
+      // aiProb is ALWAYS for outcomes[0] (first outcome)
+      // If predicting outcomes[0]: edge = aiProb - prob
+      // If predicting outcomes[1]: edge = (1 - aiProb) - (1 - prob) = prob - aiProb
+      let calculatedEdge = 0;
+      if (prediction === outcomes[0]) {
+        calculatedEdge = aiProb - prob;
       } else {
-        errorCount++;
+        calculatedEdge = (1 - aiProb) - (1 - prob);
       }
-    }
 
-    // Small delay between batches to avoid rate limiting
-    if (i + BATCH_SIZE < marketsToAnalyze.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      analyzedMarkets.push({
+        id: event.id,
+        slug: event.slug || "",
+        title: event.title,
+        category: analysis.category ?? "Other",
+        imageUrl: event.image,
+        marketProb: prob,
+        aiProb,
+        edge: calculatedEdge,
+        reasoning: analysis.reasoning ?? "Analysis based on market trends.",
+        volume: parseFloat(market.volume || "0"),
+        outcomes,
+        prediction,
+        confidence: analysis.confidence ?? 5,
+        kellyPercentage: analysis.kellyPercentage ?? 0,
+        riskFactor: analysis.riskFactor ?? "Market volatility",
+        endDate: event.endDate
+      });
+      successCount++;
+    } catch (error) {
+      console.error(`Error analyzing ${event.title}:`, error.message);
+      // Keep market even without AI analysis (fallback to market odds)
+      analyzedMarkets.push({
+        id: event.id,
+        slug: event.slug || "",
+        title: event.title,
+        category: "Other",
+        imageUrl: event.image,
+        marketProb: prob,
+        aiProb: prob,
+        edge: 0,
+        reasoning: "AI unavailable, using market odds.",
+        volume: parseFloat(market.volume || "0"),
+        outcomes,
+        prediction: outcomes[0],
+        confidence: 3,
+        kellyPercentage: 0,
+        riskFactor: "Model throttled/unavailable",
+        endDate: event.endDate,
+        fallback: true
+      });
+      errorCount++;
     }
   }
 
