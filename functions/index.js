@@ -268,7 +268,7 @@ async function analyzeMarket(title, outcomes, marketProb, volume, apiKey) {
   const outcomeB = outcomes[1] || "Other";
   const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
 
-  const prompt = `Model: google/gemma-3-27b-it:free. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
 
 Context
 - Date: ${today}
@@ -306,12 +306,14 @@ Critical rules for aiProbability:
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://metapolymarket.com',
+      'X-Title': 'MetaPolyMarket',
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'google/gemma-3-27b-it:free',
+      model: 'google/gemma-2-9b-it',
       messages: [{ role: 'user', content: prompt }],
-      reasoning: { enabled: true }
+      // reasoning removed as gemma-2-9b-it doesn't support 'reasoning' param natively in some providers
     })
   });
 
