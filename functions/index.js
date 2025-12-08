@@ -387,6 +387,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
   const MAX_RETRIES = 4;
   const RETRY_DELAY_MS = 1000; // base delay (ms) with jitter
+  const PER_CALL_DELAY_MS = 1500; // throttle each call
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -405,12 +406,15 @@ async function fetchAndAnalyzeMarkets(apiKey) {
       }
     }
   };
+  // Limit to top 100 markets to reduce total calls
+  const limitedMarkets = marketsToAnalyze.slice(0, 100);
+
   // Sequential processing to avoid 429 on free tier
   const analyzedMarkets = [];
   let successCount = 0;
   let errorCount = 0;
 
-  for (const { event, market, prob, outcomes } of marketsToAnalyze) {
+  for (const { event, market, prob, outcomes } of limitedMarkets) {
     try {
       const analysis = await runAnalysisWithRetry([
         event.title,
@@ -477,6 +481,8 @@ async function fetchAndAnalyzeMarkets(apiKey) {
       });
       errorCount++;
     }
+    // Throttle between calls to reduce 429
+    await sleep(PER_CALL_DELAY_MS);
   }
 
   console.log(`Analysis complete: ${successCount} success, ${errorCount} errors`);
