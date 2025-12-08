@@ -42,11 +42,7 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
   
   // Helper to determine API URL dynamically
   const getApiUrl = (funcName: string) => {
-      // In development, assume local emulator
-      if (import.meta.env.DEV) {
-          return `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/${funcName}`; 
-      }
-      // In production, use Cloud Run URLs
+      // Force production URLs for now to allow local testing against real backend
       return CLOUD_RUN_URLS[funcName] || `https://us-central1-${PROJECT_ID}.cloudfunctions.net/${funcName}`; 
   };
 
@@ -59,8 +55,6 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       const url = getApiUrl('sendPremiumVerificationCode');
       console.log('Attempting to fetch URL:', url); // Debug log
 
-      // Direct fetch to function
-      // Note: In local development, you might need to proxy this in vite.config.ts or use the full URL
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,9 +76,6 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       }
     } catch (err: any) {
         console.error(err);
-        // For demo purposes if backend isn't running locally:
-        // alert("Backend not connected. Simulating success for UI demo.");
-        // setStep('code');
         setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
@@ -119,8 +110,6 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       
       onClose();
     } catch (err: any) {
-       // For demo purposes if backend isn't running locally:
-       // if (code === '123456') { onSuccess(); onClose(); return; }
       setError(err.message || 'Invalid code. Please try again.');
     } finally {
       setIsLoading(false);
@@ -198,8 +187,7 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
                                 </>
                             ) : (
                                 <>
-                                    Continue
-                                    <span className="bg-white/20 px-1.5 py-0.5 rounded text-xs">Free</span>
+                                    Send Verification Code
                                 </>
                             )}
                         </button>
@@ -207,8 +195,9 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
                 </div>
             ) : (
                 <div className="space-y-4">
-                     <p className="text-slate-400 text-sm">
-                        We sent a verification code to <span className="text-white font-medium">{email}</span>.
+                    <p className="text-slate-400 text-sm">
+                        We sent a verification code to <strong>{email}</strong>.
+                        Please check your inbox (and spam folder).
                     </p>
 
                     <form onSubmit={handleVerifyCode} className="space-y-4">
@@ -216,15 +205,17 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
                             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                 Verification Code
                             </label>
-                            <input
-                                type="text"
-                                required
-                                value={code}
-                                onChange={(e) => setCode(e.target.value)}
-                                placeholder="123456"
-                                className="w-full bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-center text-2xl tracking-widest letter-spacing-2"
-                                maxLength={6}
-                            />
+                            <div className="relative">
+                                <Check className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                                <input
+                                    type="text"
+                                    required
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    placeholder="123456"
+                                    className="w-full bg-slate-800 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all placeholder-slate-600 tracking-widest text-lg"
+                                />
+                            </div>
                         </div>
 
                         {error && (
@@ -233,31 +224,31 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
                             </p>
                         )}
 
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="animate-spin" size={18} />
-                                    Verifying...
-                                </>
-                            ) : (
-                                <>
-                                    <Check size={18} />
-                                    Verify & Access
-                                </>
-                            )}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStep('email')}
-                            className="w-full text-slate-500 hover:text-white text-sm py-2 transition-colors"
-                        >
-                            Change Email
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setStep('email')}
+                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 rounded-lg transition-colors"
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="flex-[2] bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={18} />
+                                        Verifying...
+                                    </>
+                                ) : (
+                                    <>
+                                        Verify & Unlock
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </form>
                 </div>
             )}
@@ -266,4 +257,3 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
     </div>
   );
 };
-
