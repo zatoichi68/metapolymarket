@@ -22,6 +22,39 @@ function apiPlugin(): Plugin {
       }
     },
     configureServer(server) {
+      // Dev handler for /api/polymarket/events -> hits production backend with API key
+      server.middlewares.use('/api/polymarket/events', async (req, res) => {
+        try {
+          const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+          const token = env.VITE_API_AUTH_TOKEN || process.env.VITE_API_AUTH_TOKEN || '';
+          if (!token) {
+            res.statusCode = 503;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'API auth token not configured' }));
+            return;
+          }
+          // Forward to the deployed backend to simplify local dev
+          const base = env.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL || 'https://metapolymarket-140799832958.us-east5.run.app';
+          const targetUrl = `${base}${req.originalUrl || req.url}`;
+          const upstream = await fetch(targetUrl, {
+            headers: {
+              'x-api-key': token
+            }
+          });
+          res.statusCode = upstream.status;
+          for (const [k, v] of upstream.headers) {
+            res.setHeader(k, v);
+          }
+          const body = await upstream.text();
+          res.end(body);
+        } catch (error) {
+          console.error('Dev proxy /api/polymarket/events failed:', error);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Dev proxy failed' }));
+        }
+      });
+
       server.middlewares.use('/api/analyze', async (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405;
