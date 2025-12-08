@@ -8,6 +8,7 @@ import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
 const API_URL = '/api/polymarket/events?limit=200';
+const API_KEY = import.meta.env.VITE_API_AUTH_TOKEN;
 
 // In-memory cache (client-side) to throttle Polymarket fetch + AI analyses
 const MARKET_CACHE_TTL_MS = 30_000; // 30s
@@ -22,7 +23,9 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
     return marketCache.data;
   }
   try {
-    const response = await fetch(API_URL);
+    const response = await fetch(API_URL, {
+      headers: API_KEY ? { 'x-api-key': API_KEY } : undefined
+    });
     if (!response.ok) {
       throw new Error(`Network response was not ok`);
     }
