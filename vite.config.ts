@@ -93,7 +93,7 @@ function apiPlugin(): Plugin {
 
           const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
-          const prompt = `Model: google/gemma-3-27b-it:free. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+          const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
 
 Context
 - Date: ${today}
@@ -133,14 +133,15 @@ Critical rules for aiProbability:
               method: 'POST',
               headers: { 
                 'Authorization': `Bearer ${geminiApiKey}`,
+                'HTTP-Referer': 'https://metapolymarket.com',
+                'X-Title': 'MetaPolyMarket',
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                model: 'google/gemma-3-27b-it:free',
+                model: 'google/gemma-2-9b-it',
                 messages: [
                   { role: 'user', content: prompt + '\n\nRespond ONLY with valid JSON, no markdown.' }
-                ],
-                reasoning: { enabled: true }
+                ]
               })
             }
           );
