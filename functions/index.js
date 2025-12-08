@@ -385,8 +385,27 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
   console.log(`Prepared ${marketsToAnalyze.length} markets for analysis`);
 
-  // Process in parallel batches of 10
-  const BATCH_SIZE = 10;
+  // Process in parallel batches (smaller to reduce throttling on free models)
+  const BATCH_SIZE = 4;
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY_MS = 800;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const runAnalysisWithRetry = async (args) => {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await analyzeMarket(...args);
+      } catch (error) {
+        if (attempt === MAX_RETRIES) {
+          throw error;
+        }
+        const delay = RETRY_DELAY_MS * (attempt + 1);
+        console.warn(`Retrying analysis (attempt ${attempt + 1}/${MAX_RETRIES + 1}) after ${delay}ms`);
+        await sleep(delay);
+      }
+    }
+  };
   const analyzedMarkets = [];
   let successCount = 0;
   let errorCount = 0;
@@ -397,13 +416,13 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
     const batchPromises = batch.map(async ({ event, market, prob, outcomes }) => {
       try {
-        const analysis = await analyzeMarket(
+        const analysis = await runAnalysisWithRetry([
           event.title,
           outcomes,
           prob,
           parseFloat(market.volume || "0"),
           apiKey
-        );
+        ]);
 
         const aiProb = analysis.aiProbability ?? prob;
         const prediction = analysis.prediction ?? outcomes[0];
@@ -443,7 +462,29 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         };
       } catch (error) {
         console.error(`Error analyzing ${event.title}:`, error.message);
-        return { success: false, title: event.title };
+        // Keep market even without AI analysis (fallback to market odds)
+        return {
+          success: true,
+          data: {
+            id: event.id,
+            slug: event.slug || "",
+            title: event.title,
+            category: "Other",
+            imageUrl: event.image,
+            marketProb: prob,
+            aiProb: prob,
+            edge: 0,
+            reasoning: "AI unavailable, using market odds.",
+            volume: parseFloat(market.volume || "0"),
+            outcomes,
+            prediction: outcomes[0],
+            confidence: 3,
+            kellyPercentage: 0,
+            riskFactor: "Model throttled/unavailable",
+            endDate: event.endDate,
+            fallback: true
+          }
+        };
       }
     });
 
