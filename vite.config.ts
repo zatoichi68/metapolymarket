@@ -59,7 +59,7 @@ function apiPlugin(): Plugin {
 
           const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
-          const prompt = `Model: x-ai/grok-4.1-fast. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+          const prompt = `Model: google/gemma-3-27b-it:free. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
 
 Context
 - Date: ${today}
@@ -102,7 +102,7 @@ Critical rules for aiProbability:
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                model: 'x-ai/grok-4.1-fast',
+                model: 'google/gemma-3-27b-it:free',
                 messages: [
                   { role: 'user', content: prompt + '\n\nRespond ONLY with valid JSON, no markdown.' }
                 ],
