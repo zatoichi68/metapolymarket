@@ -385,10 +385,10 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
   console.log(`Prepared ${marketsToAnalyze.length} markets for analysis`);
 
-  // Process in parallel batches (smaller to reduce throttling on free models)
-  const BATCH_SIZE = 4;
-  const MAX_RETRIES = 2;
-  const RETRY_DELAY_MS = 800;
+  // Process in parallel batches (very small to limit 429 on free tier)
+  const BATCH_SIZE = 2;
+  const MAX_RETRIES = 4;
+  const RETRY_DELAY_MS = 1000; // base delay (ms) with jitter
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -400,7 +400,8 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         if (attempt === MAX_RETRIES) {
           throw error;
         }
-        const delay = RETRY_DELAY_MS * (attempt + 1);
+        const jitter = 1 + Math.random() * 0.3;
+        const delay = Math.round(RETRY_DELAY_MS * (attempt + 1) * jitter);
         console.warn(`Retrying analysis (attempt ${attempt + 1}/${MAX_RETRIES + 1}) after ${delay}ms`);
         await sleep(delay);
       }
