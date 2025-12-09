@@ -68,8 +68,8 @@ const App: React.FC = () => {
             try {
                  // Determine API URL
                  let apiUrl: string;
-                 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
-                 if (import.meta.env.DEV) {
+                 const PROJECT_ID = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'demo-project';
+                 if ((import.meta as any).env?.DEV) {
                     apiUrl = `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/checkPremiumStatus`;
                  } else {
                     // Cloud Run URL for Firebase Functions v2
@@ -429,7 +429,7 @@ const App: React.FC = () => {
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 flex items-center gap-3">
-             Crowd Wisdom <span className="text-slate-500 text-2xl">vs</span> Swarm AI
+             Crowd Wisdom <span className="text-slate-500 text-2xl">vs</span> Swarm AI <span className="text-xs text-slate-600 ml-2 font-normal border border-slate-700 rounded px-1.5 py-0.5">v1.1.0</span>
           </h1>
           <p className="text-slate-400 text-lg max-w-2xl">
             Detect arbitrage opportunities where AI disagrees with the Polymarket prediction market.
