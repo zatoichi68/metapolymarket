@@ -68,12 +68,15 @@ app.get('/api/polymarket/events', async (req, res) => {
     }
 
     // Cache 30s
-    if (polyCache.data && polyCache.expiresAt > Date.now()) {
+    if (polyCache.data && polyCache.expiresAt > Date.now() && !req.query.closed) {
       return res.json(polyCache.data);
     }
 
     const limitParam = Math.min(Number(req.query.limit) || 200, 200);
-    const url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=true&closed=false&order=volume24hr&ascending=false`;
+    const closedParam = req.query.closed === 'true';
+    const activeParam = req.query.active !== 'false'; // default true unless explicit false
+    
+    const url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=${activeParam}&closed=${closedParam}&order=volume24hr&ascending=false`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -95,7 +98,10 @@ app.get('/api/polymarket/events', async (req, res) => {
     }
 
     const data = await resp.json();
-    polyCache = { data, expiresAt: Date.now() + POLY_CACHE_TTL_MS };
+    // Only cache standard "active" requests
+    if (!req.query.closed) {
+      polyCache = { data, expiresAt: Date.now() + POLY_CACHE_TTL_MS };
+    }
     res.json(data);
   } catch (error) {
     console.error('Polymarket fetch failed:', error);
@@ -245,12 +251,31 @@ Critical rules for aiProbability:
   }
 });
 
-// Serve static files from the dist directory
-app.use(express.static(join(__dirname, 'dist')));
+// Serve static files from the dist directory with cache control
+app.use(express.static(join(__dirname, 'dist'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      // Never cache index.html
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      // Cache assets heavily (hashed filenames)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
-// Handle SPA routing - serve index.html for all routes
+// Handle SPA routing - serve index.html for all routes, BUT NOT for missing assets
 app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'));
+  // If request is for an asset (js, css, png, etc) that wasn't found by static middleware, return 404
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
+    return res.status(404).send('Not found');
+  }
+  
+  res.sendFile(join(__dirname, 'dist', 'index.html'), {
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    }
+  });
 });
 
 app.listen(PORT, () => {
