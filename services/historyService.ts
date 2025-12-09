@@ -205,16 +205,29 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
     // 3. Build resolved predictions with proper probability alignment
     const resolvedPredictions: ResolvedPrediction[] = allPredictions
       .map(p => {
-        const outcomes = p.outcomes || ['Yes', 'No'];
-        const resolvedOutcome = (resolvedMap.get(p.marketId) || p.resolvedOutcome || '').toString();
-        if (!resolvedOutcome) return null;
+        const outcomes = p.outcomes && p.outcomes.length >= 2 ? p.outcomes : ['Yes', 'No'];
+        const resolvedOutcomeRaw = (resolvedMap.get(p.marketId) || p.resolvedOutcome || '').toString();
+        if (!resolvedOutcomeRaw) return null;
 
         const predictedOutcome = p.aiPrediction || outcomes[0];
         const isPredFirst = predictedOutcome === outcomes[0];
 
         // aiProb stocke la probabilité de outcomes[0]; si on a prédit outcomes[1], on inverse
         const predictedProb = isPredFirst ? p.aiProb : 1 - p.aiProb;
-        const actualProb = resolvedOutcome === predictedOutcome ? 1 : 0;
+
+        // Normalisation des chaînes pour comparaison
+        const norm = (s: string) => s.trim().toLowerCase();
+        const resolvedOutcomeNorm = norm(resolvedOutcomeRaw);
+        const outcomeFirstNorm = norm(outcomes[0]);
+        const predictedOutcomeNorm = norm(predictedOutcome);
+
+        // Gestion du cas "Other" : si prédiction = Other, on considère correct si le winner n'est pas outcome[0]
+        let actualProb = 0;
+        if (predictedOutcomeNorm === 'other') {
+          actualProb = resolvedOutcomeNorm !== outcomeFirstNorm ? 1 : 0;
+        } else {
+          actualProb = resolvedOutcomeNorm === predictedOutcomeNorm ? 1 : 0;
+        }
 
         const brierError = Math.pow(predictedProb - actualProb, 2);
 
@@ -241,7 +254,7 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
           confidence: p.confidence || 0,
           kellyPercentage: kellyPct,
           riskFactor: p.riskFactor || "Risk factor not archived.",
-          resolvedOutcome: resolvedOutcome as 'Yes' | 'No' | string,
+          resolvedOutcome: resolvedOutcomeRaw as 'Yes' | 'No' | string,
           wasCorrect,
           brierError,
           kellyReturn

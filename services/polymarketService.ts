@@ -8,7 +8,8 @@ import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 
 // but often causes CORS issues when using proxies. 
 // We proceed without the key for maximum compatibility with the public endpoint.
 const API_URL = '/api/polymarket/events?limit=200';
-const API_KEY = import.meta.env.VITE_API_AUTH_TOKEN;
+const API_KEY = (import.meta as any).env?.VITE_API_AUTH_TOKEN || undefined;
+const PROXY_URL = 'https://corsproxy.io/?';
 
 // In-memory cache (client-side) to throttle Polymarket fetch + AI analyses
 const MARKET_CACHE_TTL_MS = 30_000; // 30s
@@ -242,11 +243,13 @@ export const getResolvedMarkets = async (limitCount = 100): Promise<ResolvedMark
                     ? JSON.parse(market.outcomes)
                     : market.outcomes;
                  
-                 // Find winning index (price > 0.95)
-                 // Note: Polymarket outcomePrices are strings, need to parse floats
-                 const winningIndex = prices.findIndex((p: string | number) => parseFloat(String(p)) > 0.95);
-                 
-                 if (winningIndex === -1) return null; // Not clearly resolved yet
+                 if (!Array.isArray(outcomes) || outcomes.length === 0) return null;
+
+                 // Find winning index using max price (more robust than >0.95 heuristic)
+                 const floats = prices.map((p: string | number) => parseFloat(String(p)));
+                 const winningIndex = floats.reduce((maxIdx: number, val: number, idx: number, arr: number[]) => {
+                    return val > arr[maxIdx] ? idx : maxIdx;
+                 }, 0);
 
                  const resolvedOutcome = outcomes[winningIndex];
                  
