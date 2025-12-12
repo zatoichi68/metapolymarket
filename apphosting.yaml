@@ -15,6 +15,10 @@ env:
   - variable: OPENROUTER_API_KEY
     secret: openrouter-api-key
 
+  # Token serveur pour protéger /api/analyze (NE PAS exposer côté client)
+  - variable: API_AUTH_TOKEN
+    secret: API_AUTH_TOKEN
+
   # === Configuration Firebase (préfixe VITE_ pour le frontend) ===
   - variable: VITE_FIREBASE_API_KEY
     secret: firebase-api-key
