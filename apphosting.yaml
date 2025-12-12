@@ -13,7 +13,7 @@ env:
   # === API OpenRouter (Grok 4.1 Fast) ===
   # Clé API sécurisée côté serveur uniquement (PAS de préfixe VITE_)
   - variable: OPENROUTER_API_KEY
-    secret: openrouter-api-key
+    secret: OPENROUTER_API_KEY
 
   # Token serveur pour protéger /api/analyze (NE PAS exposer côté client)
   - variable: API_AUTH_TOKEN
