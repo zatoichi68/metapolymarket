@@ -100,13 +100,13 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
 
       const dates = Array.from(predictionsByDate.keys()).sort();
       
-      // Calculate CUMULATIVE stats over time
+      // Calculate CUMULATIVE stats over time (Compound Bankroll ROI)
       let cumulativeCorrect = 0;
       let cumulativeTotal = 0;
-      let cumulativeRoi = 0;
+      let bankrollMultiplier = 1.0;
 
-      const accuracyData = [];
-      const roiData = [];
+      const accuracyData: number[] = [];
+      const roiData: number[] = [];
 
       dates.forEach(date => {
           const dayPreds = predictionsByDate.get(date) || [];
@@ -114,11 +114,15 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
           dayPreds.forEach(p => {
               cumulativeTotal++;
               if (p.wasCorrect) cumulativeCorrect++;
-              cumulativeRoi += p.kellyReturn;
+              
+              // Compound ROI calculation
+              const r = Number.isFinite(p.kellyReturn) ? p.kellyReturn : 0;
+              const safeReturn = Math.max(-0.99, r);
+              bankrollMultiplier *= (1 + safeReturn);
           });
 
           const currentAccuracy = (cumulativeCorrect / cumulativeTotal) * 100;
-          const currentRoi = cumulativeRoi * 100; // Convert to percentage
+          const currentRoi = (bankrollMultiplier - 1) * 100; // Convert to percentage change
 
           accuracyData.push(currentAccuracy);
           roiData.push(currentRoi);
@@ -132,14 +136,16 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
             data: accuracyData,
             borderColor: 'rgb(59, 130, 246)',
             backgroundColor: 'rgba(59, 130, 246, 0.5)',
-            tension: 0.4
+            tension: 0.35,
+            cubicInterpolationMode: 'monotone'
           },
           {
             label: 'Kelly ROI %',
             data: roiData,
             borderColor: 'rgb(34, 197, 94)',
             backgroundColor: 'rgba(34, 197, 94, 0.5)',
-            tension: 0.4
+            tension: 0.35,
+            cubicInterpolationMode: 'monotone'
           }
         ]
       };
@@ -155,7 +161,13 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
       },
       title: {
         display: true,
-        text: 'Backtesting: Accuracy & ROI Over Time'
+        text: 'Backtesting: Accuracy & Bankroll ROI (Compounded) Over Time'
+      }
+    },
+    // Prevent misleading interpolation dips below -100% (ROI compounding cannot be < -100%)
+    scales: {
+      y: {
+        min: -100
       }
     }
   };
@@ -332,11 +344,17 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                         </div>
                         <div className="bg-slate-800 p-4 rounded-lg text-center relative">
                           <div className="absolute top-2 right-2">
-                            <InfoTooltip content="Theoretical Return on Investment if betting according to Kelly Criterion recommendations. Reflects optimal bankroll growth." />
+                            <InfoTooltip content="ROI composé (bankroll) en suivant la mise Kelly (bornée à 0–100%: pas de levier). Ne peut pas descendre sous -100%." />
                           </div>
                           <TrendingUp className="mx-auto mb-2 text-emerald-400" size={32} />
-                          <h3 className="text-lg font-bold text-white">Kelly ROI</h3>
-                          <p className="text-2xl font-bold text-emerald-400">+{resolvedData.stats.kellyROI.toFixed(2)}%</p>
+                          <h3 className="text-lg font-bold text-white">Kelly ROI (composé)</h3>
+                          <p
+                            className={`text-2xl font-bold ${
+                              resolvedData.stats.kellyROI >= 0 ? 'text-emerald-400' : 'text-red-400'
+                            }`}
+                          >
+                            {(resolvedData.stats.kellyROI * 100).toFixed(2)}%
+                          </p>
                           <p className="text-sm text-slate-400">Cumulative return</p>
                         </div>
                         <div className="bg-slate-800 p-4 rounded-lg text-center relative">

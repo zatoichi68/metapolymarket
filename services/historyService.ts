@@ -212,6 +212,19 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
         const predictedOutcome = p.aiPrediction || outcomes[0];
         const isPredFirst = predictedOutcome === outcomes[0];
 
+        // Normalise kellyPercentage from history record (stored as percent, e.g. 12.5 for 12.5%)
+        // Option A: bankroll compounding sans levier.
+        // On borne la mise Kelly à [0%, 100%] pour éviter une perte > 100% (levier).
+        const kellyPctRaw =
+          typeof p.kellyPercentage === 'number' && Number.isFinite(p.kellyPercentage)
+            ? p.kellyPercentage
+            : 0;
+        const kellyPct = Math.max(0, Math.min(100, kellyPctRaw));
+        
+        // entryPrice est le prix payé pour l'outcome prédit au moment de la prédiction
+        const entryPrice = isPredFirst ? p.marketProb : (1 - p.marketProb);
+        const safeEntryPrice = Math.max(0.01, Math.min(0.99, entryPrice)); // Bornes de sécurité
+
         // aiProb stocke la probabilité de outcomes[0]; si on a prédit outcomes[1], on inverse
         const predictedProb = isPredFirst ? p.aiProb : 1 - p.aiProb;
 
@@ -231,11 +244,26 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
 
         const brierError = Math.pow(predictedProb - actualProb, 2);
 
-        // ROI simple binaire: +1 si win, -1 si loss (faute de payout précis); pondéré par Kelly%
+        // ROI Kelly Réel (Compound Growth)
         const wasCorrect = actualProb === 1;
-        const unitRoi = wasCorrect ? 1 : -1;
-        const kellyPct = p.kellyPercentage || 0;
-        const kellyReturn = unitRoi * (kellyPct / 100);
+        const kellyFrac = kellyPct / 100;
+        
+        let kellyReturn = 0;
+        if (wasCorrect) {
+            // Gain net = (Payout - Cost) / Cost = (1 - Price) / Price
+            // Impact Bankroll = KellyFraction * GainNet
+            const profitMargin = (1 - safeEntryPrice) / safeEntryPrice;
+            kellyReturn = kellyFrac * profitMargin;
+        } else {
+            // Perte nette = -100% de la mise
+            // Impact Bankroll = -KellyFraction
+            kellyReturn = -kellyFrac;
+        }
+
+        // Sécurité: en modèle sans levier, le retour d'un trade ne doit jamais être <= -100%.
+        // (Avec notre clamp kellyFrac <= 1 ça ne devrait pas arriver, mais on protège les données.)
+        if (!Number.isFinite(kellyReturn)) kellyReturn = 0;
+        kellyReturn = Math.max(-0.99, kellyReturn);
 
         return {
           ...p,
@@ -296,7 +324,23 @@ export const calculateBacktestStats = (resolved: ResolvedPrediction[]): Backtest
   const accuracy = (correct / total) * 100;
   const brierScore = resolved.reduce((sum, p) => sum + p.brierError, 0);
   const avgBrier = brierScore / total;
-  const kellyROI = resolved.reduce((sum, p) => sum + p.kellyReturn, 0);
+  
+  // Calcul ROI composé (Cumulative Bankroll Growth)
+  // Bankroll_fin = Bankroll_init * product(1 + return_i)
+  // ROI = (Bankroll_fin / Bankroll_init) - 1
+  // On trie par date pour simuler l'évolution chronologique (important si on voulait faire un stop-loss, ici mathématiquement le produit est commutatif mais bon)
+  const sortedResolved = [...resolved].sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime());
+  
+  let bankrollMultiplier = 1.0;
+  sortedResolved.forEach(p => {
+      // Protection contre faillite totale (si kellyReturn <= -1, on est mort)
+      // Kelly fractional est sensé éviter ça, mais on cap à -99% par trade au cas où
+      const safeReturn = Math.max(-0.99, p.kellyReturn);
+      bankrollMultiplier *= (1 + safeReturn);
+  });
+  
+  const kellyROI = bankrollMultiplier - 1; // Ex: 1.5 -> +0.5 (+50%)
+
   const winRate = (resolved.filter(p => p.kellyReturn > 0).length / total) * 100;
   
   // Over time (group by date)

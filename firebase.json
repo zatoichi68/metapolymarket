@@ -9,6 +9,22 @@
       "node_modules",
       ".git"
     ]
+  },
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "metapolymarket",
+          "region": "us-east5"
+        }
+      }
+    ]
   }
 }
-

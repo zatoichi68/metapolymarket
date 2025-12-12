@@ -268,7 +268,7 @@ async function analyzeMarket(title, outcomes, marketProb, volume, apiKey) {
   const outcomeB = outcomes[1] || "Other";
   const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
 
-  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. Prefer "no-bet" to overconfidence.
 
 Context
 - Date: ${today}
@@ -278,13 +278,22 @@ Context
 - Volume: $${(volume || 0).toLocaleString()}
 
 Protocol (keep it lean)
-1) Rules check: flag traps/ambiguities.
-2) Signals (one short line each):
+0) Hard rule: start from market odds as your prior. If you lack strong evidence, stay within ±3 points of market.
+1) Rules check: flag traps/ambiguities, unclear resolution, or missing info.
+2) Signals (one short line each; factual, not vibes):
    - Data: base rates/stats/polls.
    - Sentiment: crowd/media momentum.
    - Contrarian: hidden risks/why consensus fails.
-3) Synthesis: true probability for "${outcomeA}" (0-1). Mention probability of the outcome you actually recommend.
-4) Bet: compare to market; Kelly% = (b*p - q)/b with b = decimal odds - 1, p = prob of recommended outcome, q = 1-p. If edge < 1% or confidence < 3, set Kelly% = 0.
+3) Synthesis: output aiProbability as the probability of "${outcomeA}" ONLY (0-1). Your recommended prediction MUST be one of the two outcomes.
+4) Discipline:
+   - If market odds are extreme (<=5% or >=95%), set kellyPercentage=0 (micro-edge + tiny payout => unstable).
+   - If your edge vs market is < 2 points, set kellyPercentage=0.
+   - If the question is short-horizon/noisy (sports, crypto <24h, rumor-based announcements), default to market odds and kellyPercentage=0 unless a confirmed catalyst exists.
+
+Specific Rules for Accuracy:
+- SPORTS: Never output implied confidence above 70% unless there is deterministic information (injury news, lineup lock, etc). Upsets happen constantly.
+- CRYPTO/FINANCE (Short Term < 24h): Assume near 50/50 randomness ("Random Walk") unless there is a massive, confirmed catalyst. If no catalyst, default to market odds or 50/50 with Kelly% = 0.
+- NEWS/ANNOUNCEMENTS: If asking "Will X happen by [Date]?" and no news yet, default to "No" (Status Quo) with high confidence. Do not bet "Yes" on rumors alone.
 
 If data is missing, state a brief assumption instead of guessing.
 
@@ -332,6 +341,44 @@ Critical rules for aiProbability:
   const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(cleanText);
 }
+
+const clamp01 = (x) => {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return 0.5;
+  return Math.min(1, Math.max(0, n));
+};
+
+const computeKellyPercentage = ({ aiProbabilityForOutcomeA, prediction, outcomes, marketProbOutcomeA, confidence }) => {
+  const outcomeA = outcomes?.[0];
+  const outcomeB = outcomes?.[1] || 'Other';
+  const aiA = clamp01(aiProbabilityForOutcomeA);
+  const mpA = clamp01(marketProbOutcomeA);
+
+  const pred =
+    prediction === outcomeA || prediction === outcomeB
+      ? prediction
+      : aiA >= 0.5
+        ? outcomeA
+        : outcomeB;
+
+  const predictedProb = pred === outcomeA ? aiA : 1 - aiA;
+  const marketSideProb = pred === outcomeA ? mpA : 1 - mpA;
+
+  const conf = Number(confidence);
+  if (Number.isFinite(conf) && conf < 4) return 0;
+  if (marketSideProb <= 0.05 || marketSideProb >= 0.95) return 0;
+  const edgeAbs = Math.abs(predictedProb - marketSideProb);
+  if (edgeAbs < 0.02) return 0;
+
+  const b = (1 / marketSideProb) - 1;
+  if (!Number.isFinite(b) || b <= 0) return 0;
+  const p = predictedProb;
+  const q = 1 - p;
+  let f = (b * p - q) / b;
+  if (!Number.isFinite(f)) f = 0;
+  f = Math.max(0, Math.min(1, f));
+  return Math.round(f * 10000) / 100;
+};
 
 /**
  * Fetch and analyze all markets with parallel processing
@@ -428,6 +475,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
       const aiProb = analysis.aiProbability ?? prob;
       const prediction = analysis.prediction ?? outcomes[0];
+      const confidence = analysis.confidence ?? 5;
       
       // Calculate edge correctly based on which outcome is predicted
       // aiProb is ALWAYS for outcomes[0] (first outcome)
@@ -453,8 +501,14 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         volume: parseFloat(market.volume || "0"),
         outcomes,
         prediction,
-        confidence: analysis.confidence ?? 5,
-        kellyPercentage: analysis.kellyPercentage ?? 0,
+        confidence,
+        kellyPercentage: computeKellyPercentage({
+          aiProbabilityForOutcomeA: aiProb,
+          prediction,
+          outcomes,
+          marketProbOutcomeA: prob,
+          confidence
+        }),
         riskFactor: analysis.riskFactor ?? "Market volatility",
         endDate: event.endDate
       });
