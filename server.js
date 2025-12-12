@@ -314,12 +314,7 @@ Critical rules for aiProbability:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenRouter API error:', errorText);
-      return res.status(503).json({
-        error: 'OpenRouter API error',
-        status: response.status,
-        // Avoid leaking large payloads; keep a short hint for debugging.
-        message: String(errorText || '').slice(0, 300)
-      });
+      return res.status(503).json({ error: 'OpenRouter API error' });
     }
 
     const data = await response.json();
@@ -366,6 +361,7 @@ Critical rules for aiProbability:
 
 // Serve static files from the dist directory with cache control
 app.use(express.static(join(__dirname, 'dist'), {
+  index: 'index.html', // Ensure index.html is served for root
   setHeaders: (res, path) => {
     if (path.endsWith('.html')) {
       // Never cache index.html
@@ -393,4 +389,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Serving static files from: ${join(__dirname, 'dist')}`);
 });
