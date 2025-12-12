@@ -289,8 +289,8 @@ const App: React.FC = () => {
         const bCompetitive = Math.abs(b.marketProb - 0.5);
         return aCompetitive - bCompetitive;
       case 'edge':
-        // Sort by absolute edge (biggest opportunities first)
-        return Math.abs(b.edge) - Math.abs(a.edge);
+        // Sort by edge value (highest positive edge first)
+        return b.edge - a.edge;
       default:
         return b.volume - a.volume;
     }
