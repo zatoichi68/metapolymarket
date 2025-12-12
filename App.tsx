@@ -35,7 +35,7 @@ const App: React.FC = () => {
   const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
   const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('volume24h'); // Sort options like Polymarket
+  const [sortBy, setSortBy] = useState<string>('edge'); // Default sort by Edge
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [showAlerts, setShowAlerts] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(() => {
@@ -288,6 +288,9 @@ const App: React.FC = () => {
         const aCompetitive = Math.abs(a.marketProb - 0.5);
         const bCompetitive = Math.abs(b.marketProb - 0.5);
         return aCompetitive - bCompetitive;
+      case 'edge':
+        // Sort by absolute edge (biggest opportunities first)
+        return Math.abs(b.edge) - Math.abs(a.edge);
       default:
         return b.volume - a.volume;
     }
@@ -330,6 +333,7 @@ const App: React.FC = () => {
   ];
 
   const sortOptions = [
+    { id: 'edge', label: 'Highest Edge', icon: Zap },
     { id: 'volume24h', label: '24hr Volume', icon: TrendingUp },
     { id: 'volume', label: 'Total Volume', icon: DollarSign },
     { id: 'liquidity', label: 'Liquidity', icon: Droplets },
