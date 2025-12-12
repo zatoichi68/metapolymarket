@@ -314,7 +314,12 @@ Critical rules for aiProbability:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenRouter API error:', errorText);
-      return res.status(503).json({ error: 'OpenRouter API error' });
+      return res.status(503).json({
+        error: 'OpenRouter API error',
+        status: response.status,
+        // Avoid leaking large payloads; keep a short hint for debugging.
+        message: String(errorText || '').slice(0, 300)
+      });
     }
 
     const data = await response.json();
