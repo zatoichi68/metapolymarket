@@ -11,13 +11,30 @@ const PORT = process.env.PORT || 8080;
 // Middleware pour parser le JSON (limite la taille pour éviter les abus)
 app.use(express.json({ limit: '50kb' }));
 
-// Sécurité basique : headers
+// Sécurité basique : headers (CORS permis pour l'extension)
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('X-XSS-Protection', '0');
+  
+  // Allow CORS from Polymarket and Extension
+  const origin = req.headers.origin;
+  if (origin && (origin.includes('polymarket.com') || origin.startsWith('chrome-extension://'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+    // Important for cross-origin fetch
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  } else {
+    // Default strict policy for other origins
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   next();
 });
 
@@ -31,13 +48,13 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 30; // requêtes par minute par IP
 const rateBuckets = new Map();
 
-const hitRateLimit = (ip) => {
+const hitRateLimit = (ip, limit = RATE_LIMIT_MAX) => {
   const now = Date.now();
   const bucket = rateBuckets.get(ip) || [];
   const recent = bucket.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   recent.push(now);
   rateBuckets.set(ip, recent);
-  return recent.length > RATE_LIMIT_MAX;
+  return recent.length > limit;
 };
 
 // Cache Polymarket côté serveur
@@ -51,24 +68,84 @@ const analysisCache = new Map();
 const makeCacheKey = ({ title, outcomes, marketProb, volume }) =>
   `${title}__${(outcomes || []).join('|')}__${Number(marketProb).toFixed(4)}__${Number(volume || 0).toFixed(2)}`;
 
+const clamp01 = (x) => {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return 0.5;
+  return Math.min(1, Math.max(0, n));
+};
+
+/**
+ * Kelly "Option A" (bankroll compounding sans levier).
+ * Important: on ne fait PAS confiance au Kelly du modèle (trop instable / erreurs de formule).
+ * On calcule Kelly à partir de p (AI) et du prix marché pour l'outcome recommandé,
+ * puis on applique des garde-fous pour éviter les "wipeouts" sur marchés extrêmes / edge minuscule.
+ */
+const computeKellyPercentage = ({
+  aiProbabilityForOutcomeA,
+  prediction,
+  outcomes,
+  marketProbOutcomeA,
+  confidence
+}) => {
+  const outcomeA = outcomes?.[0];
+  const outcomeB = outcomes?.[1] || 'Other';
+  const aiA = clamp01(aiProbabilityForOutcomeA);
+  const mpA = clamp01(marketProbOutcomeA);
+
+  // Normalise prediction à outcomeA/outcomeB; fallback basé sur probabilité.
+  const pred =
+    prediction === outcomeA || prediction === outcomeB
+      ? prediction
+      : aiA >= 0.5
+        ? outcomeA
+        : outcomeB;
+
+  const predictedProb = pred === outcomeA ? aiA : 1 - aiA;
+  const marketSideProb = pred === outcomeA ? mpA : 1 - mpA;
+
+  // Garde-fous de sizing (empiriques, basés sur l'échantillon Firestore):
+  // - pas de bet sur prix extrêmes (p≈0 ou p≈1): faible payout + micro-edge => énorme Kelly instable
+  // - pas de bet si edge < 2 points (bruit > signal pour ce modèle)
+  // - si confiance faible, pas de bet
+  const conf = Number(confidence);
+  if (Number.isFinite(conf) && conf < 4) return 0;
+  if (marketSideProb <= 0.05 || marketSideProb >= 0.95) return 0;
+  const edgeAbs = Math.abs(predictedProb - marketSideProb);
+  if (edgeAbs < 0.02) return 0;
+
+  // Kelly binaire: f* = (bp - q)/b avec b = (1/price)-1
+  const b = (1 / marketSideProb) - 1;
+  if (!Number.isFinite(b) || b <= 0) return 0;
+  const p = predictedProb;
+  const q = 1 - p;
+  let f = (b * p - q) / b;
+  if (!Number.isFinite(f)) f = 0;
+
+  // Option A sans levier: clamp [0, 1] => [0%, 100%]
+  f = Math.max(0, Math.min(1, f));
+  return Math.round(f * 10000) / 100; // 2 décimales
+};
+
 // Route proxy backend pour Polymarket (évite corsproxy.io)
 app.get('/api/polymarket/events', async (req, res) => {
   try {
-    if (!API_AUTH_TOKEN) {
-      return res.status(503).json({ error: 'API auth token not configured' });
-    }
-    if (req.headers['x-api-key'] !== API_AUTH_TOKEN) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    // Auth simple via en-tête x-api-key (optionnel pour usage public avec rate limit)
+    const clientApiKey = req.headers['x-api-key'];
+    const isAuthenticated = API_AUTH_TOKEN && clientApiKey === API_AUTH_TOKEN;
+
+    // Si pas authentifié par token, on applique un rate limit strict par IP
+    if (!isAuthenticated) {
+      const ip = req.ip || req.connection.remoteAddress || 'unknown';
+      // Limite pour les appels publics (proxy events) : 20 requêtes / minute (un peu plus large que analyze)
+      const PUBLIC_PROXY_RATE_LIMIT = 20; 
+      if (hitRateLimit(ip, PUBLIC_PROXY_RATE_LIMIT)) {
+        return res.status(429).json({ error: 'Rate limit exceeded' });
+      }
     }
 
-    // Rate limit léger
-    const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    if (hitRateLimit(ip)) {
-      return res.status(429).json({ error: 'Rate limit exceeded' });
-    }
-
-    // Cache 30s
-    if (polyCache.data && polyCache.expiresAt > Date.now() && !req.query.closed) {
+    // Cache 30s (only for global list, not specific searches)
+    const isSearch = req.query.slug || req.query.id;
+    if (!isSearch && polyCache.data && polyCache.expiresAt > Date.now() && !req.query.closed) {
       return res.json(polyCache.data);
     }
 
@@ -76,7 +153,14 @@ app.get('/api/polymarket/events', async (req, res) => {
     const closedParam = req.query.closed === 'true';
     const activeParam = req.query.active !== 'false'; // default true unless explicit false
     
-    const url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=${activeParam}&closed=${closedParam}&order=volume24hr&ascending=false`;
+    let url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=${activeParam}&closed=${closedParam}&order=volume24hr&ascending=false`;
+
+    // Handle specific event lookups
+    if (req.query.slug) {
+      url = `https://gamma-api.polymarket.com/events?slug=${req.query.slug}`;
+    } else if (req.query.id) {
+      url = `https://gamma-api.polymarket.com/events?id=${req.query.id}`;
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -98,8 +182,8 @@ app.get('/api/polymarket/events', async (req, res) => {
     }
 
     const data = await resp.json();
-    // Only cache standard "active" requests
-    if (!req.query.closed) {
+    // Only cache standard "active" requests (dashboard view)
+    if (!isSearch && !req.query.closed) {
       polyCache = { data, expiresAt: Date.now() + POLY_CACHE_TTL_MS };
     }
     res.json(data);
@@ -119,16 +203,19 @@ app.post('/api/analyze', async (req, res) => {
     return res.status(503).json({ error: 'API auth token not configured' });
   }
 
-  // Auth simple via en-tête x-api-key
-  if (API_AUTH_TOKEN && req.headers['x-api-key'] !== API_AUTH_TOKEN) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  // Auth simple via en-tête x-api-key (optionnel pour usage public avec rate limit)
+  const clientApiKey = req.headers['x-api-key'];
+  const isAuthenticated = API_AUTH_TOKEN && clientApiKey === API_AUTH_TOKEN;
 
-  // Rate limit basique par IP
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  if (hitRateLimit(ip)) {
-    return res.status(429).json({ error: 'Rate limit exceeded' });
-  }
+  // Si pas authentifié par token, on applique un rate limit strict par IP
+    if (!isAuthenticated) {
+      const ip = req.ip || req.connection.remoteAddress || 'unknown';
+      // Limite plus stricte pour les anonymes : 25 requêtes / minute (demandé par user)
+      const PUBLIC_RATE_LIMIT_MAX = 25; 
+      if (hitRateLimit(ip, PUBLIC_RATE_LIMIT_MAX)) {
+        return res.status(429).json({ error: 'Rate limit exceeded' });
+      }
+    }
 
   try {
     const { title, outcomes, marketProb, volume } = req.body;
@@ -165,7 +252,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.json(cached.data);
     }
     
-    const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+    const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. Prefer "no-bet" to overconfidence.
 
 Context
 - Date: ${today}
@@ -175,13 +262,22 @@ Context
 - Volume: $${(volume || 0).toLocaleString()}
 
 Protocol (keep it lean)
-1) Rules check: flag traps/ambiguities.
-2) Signals (one short line each):
+0) Hard rule: start from market odds as your prior. If you lack strong evidence, stay within ±3 points of market.
+1) Rules check: flag traps/ambiguities, unclear resolution, or missing info.
+2) Signals (one short line each; factual, not vibes):
    - Data: base rates/stats/polls.
    - Sentiment: crowd/media momentum.
    - Contrarian: hidden risks/why consensus fails.
-3) Synthesis: true probability for "${outcomeA}" (0-1). Mention probability of the outcome you actually recommend.
-4) Bet: compare to market; Kelly% = (b*p - q)/b with b = decimal odds - 1, p = prob of recommended outcome, q = 1-p. If edge < 1% or confidence < 3, set Kelly% = 0.
+3) Synthesis: output aiProbability as the probability of "${outcomeA}" ONLY (0-1). Your recommended prediction MUST be one of the two outcomes.
+4) Discipline:
+   - If market odds are extreme (<=5% or >=95%), set kellyPercentage=0 (micro-edge + tiny payout => unstable).
+   - If your edge vs market is < 2 points, set kellyPercentage=0.
+   - If the question is short-horizon/noisy (sports, crypto <24h, rumor-based announcements), default to market odds and kellyPercentage=0 unless a confirmed catalyst exists.
+
+Specific Rules for Accuracy:
+- SPORTS: Never output implied confidence above 70% unless there is deterministic information (injury news, lineup lock, etc). Upsets happen constantly.
+- CRYPTO/FINANCE (Short Term < 24h): Assume near 50/50 randomness ("Random Walk") unless there is a massive, confirmed catalyst. If no catalyst, default to market odds or 50/50 with Kelly% = 0.
+- NEWS/ANNOUNCEMENTS: If asking "Will X happen by [Date]?" and no news yet, default to "No" (Status Quo) with high confidence. Do not bet "Yes" on rumors alone.
 
 If data is missing, state a brief assumption instead of guessing.
 
@@ -232,14 +328,26 @@ Critical rules for aiProbability:
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleanText);
     
+    const aiProbability = parsed.aiProbability ?? marketProb;
+    const prediction = parsed.prediction ?? outcomeA;
+    const confidence = parsed.confidence ?? 5;
+
     const payload = {
-      aiProbability: parsed.aiProbability ?? marketProb,
-      prediction: parsed.prediction ?? outcomeA,
+      aiProbability,
+      prediction,
       reasoning: parsed.reasoning ?? "Analysis based on market trends.",
       category: parsed.category ?? "Other",
-      kellyPercentage: parsed.kellyPercentage ?? 0,
-      confidence: parsed.confidence ?? 5,
-      riskFactor: parsed.riskFactor ?? "Market volatility"
+      // Kelly recalculé (Option A) avec garde-fous
+      kellyPercentage: computeKellyPercentage({
+        aiProbabilityForOutcomeA: aiProbability,
+        prediction,
+        outcomes,
+        marketProbOutcomeA: marketProb,
+        confidence
+      }),
+      confidence,
+      riskFactor: parsed.riskFactor ?? "Market volatility",
+      edge: (aiProbability ?? marketProb) - marketProb
     };
 
     analysisCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS });
