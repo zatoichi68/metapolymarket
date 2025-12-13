@@ -803,6 +803,54 @@ const App: React.FC = () => {
         )}
 
       </div>
+
+      {/* Footer SEO & Links */}
+      <footer className="border-t border-slate-800 bg-slate-900/50 mt-12 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            <div className="col-span-1 md:col-span-2">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="text-blue-400 h-6 w-6" />
+                <span className="text-xl font-bold text-white">MetaPolymarket</span>
+              </div>
+              <p className="text-slate-400 text-sm leading-relaxed max-w-md">
+                MetaPolymarket provides advanced AI-driven analysis for prediction markets. 
+                Our Meta-Oracle engine analyzes Polymarket events to identify arbitrage opportunities, 
+                assess true probabilities, and calculate Kelly Criterion stake sizing for data-driven betting strategies.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-bold mb-4">Market Categories</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li><button onClick={() => setSelectedCategory(Category.POLITICS)} className="hover:text-blue-400 transition-colors">Politics Predictions</button></li>
+                <li><button onClick={() => setSelectedCategory(Category.CRYPTO)} className="hover:text-blue-400 transition-colors">Crypto Markets</button></li>
+                <li><button onClick={() => setSelectedCategory(Category.SPORTS)} className="hover:text-blue-400 transition-colors">Sports Betting</button></li>
+                <li><button onClick={() => setSelectedCategory(Category.BUSINESS)} className="hover:text-blue-400 transition-colors">Business & Tech</button></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-white font-bold mb-4">Resources</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li><button onClick={() => setShowHowItWorks(true)} className="hover:text-blue-400 transition-colors">How AI Analysis Works</button></li>
+                <li><button onClick={() => setShowHistory(true)} className="hover:text-blue-400 transition-colors">Prediction History</button></li>
+                <li><button onClick={() => setShowPremiumModal(true)} className="hover:text-amber-400 transition-colors">Premium Access</button></li>
+                <li><a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Visit Polymarket</a></li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+            <p>&copy; {new Date().getFullYear()} MetaPolymarket. All rights reserved.</p>
+            <div className="flex gap-6">
+              <span>Not Financial Advice</span>
+              <span>Prediction Markets Analysis</span>
+              <span>AI Forecasting</span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

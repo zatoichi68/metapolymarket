@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "PolyTrader Edge",
+  "version": "1.0.0",
+  "description": "Analyse les marchés Polymarket en temps réel et met en évidence les opportunités d'arbitrage directement sur la page.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://polymarket.com/*",
+    "https://metapolymarket-140799832958.us-east5.run.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "PolyTrader Edge",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://polymarket.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

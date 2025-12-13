@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body { 
+      font-family: 'Segoe UI', system-ui, sans-serif; 
+      width: 220px; 
+      padding: 16px; 
+      background: #0f172a; 
+      color: #f8fafc; 
+      text-align: center; 
+      margin: 0;
+      overflow: hidden;
+    }
+    h1 { 
+      font-size: 16px; 
+      margin: 0 0 4px; 
+      color: #00fa9a; 
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    p { 
+      font-size: 12px; 
+      opacity: 0.7; 
+      margin: 0 0 16px 0; 
+    }
+
+    /* K2000 Scanner Container */
+    .scanner-container {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 0, 0, 0.2);
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 12px;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.1);
+    }
+
+    /* Le point rouge qui bouge */
+    .scanner-eye {
+      width: 20%;
+      height: 100%;
+      background: #ff0000;
+      border-radius: 2px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      box-shadow: 0 0 8px #ff0000, 0 0 15px #ff0000;
+      animation: k2000 1.2s ease-in-out infinite alternate;
+    }
+
+    @keyframes k2000 {
+      0% { left: 0; }
+      100% { left: 80%; }
+    }
+
+    .stats {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 13px;
+    }
+    .count-val {
+      font-weight: bold;
+      color: #00fa9a;
+      font-size: 16px;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>PolyTrader Edge</h1>
+  <p>System Active</p>
+  
+  <div class="scanner-container">
+    <div class="scanner-eye"></div>
+  </div>
+
+  <div class="stats">
+    Scanned Markets<br>
+    <span id="scan-count" class="count-val">--</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

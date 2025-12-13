@@ -126,6 +126,132 @@ const computeKellyPercentage = ({
   return Math.round(f * 10000) / 100; // 2 décimales
 };
 
+// Recherche une analyse spécifique par slug ou ID (dans l'historique récent)
+app.get('/api/picks/find', async (req, res) => {
+  const { slug } = req.query;
+  if (!slug) return res.status(400).json({ error: 'Slug required' });
+
+  // 1. Chercher dans le cache mémoire serveur d'abord
+  // (Pas implémenté globalement pour l'historique, donc on passe)
+
+  try {
+    const projectId = 'metapolymarket-140799832958';
+    // Stratégie : Chercher dans daily_picks d'aujourd'hui (déjà fait par l'extension mais bon)
+    // Et chercher dans prediction_history (qui est archivé par date).
+    // Firestore REST API search n'est pas trivial sans index.
+    
+    // TRICHE EFFICACE : On suppose que l'analyse est récente (aujourd'hui ou hier).
+    // On va fetcher daily_picks d'aujourd'hui et d'hier.
+    
+    const datesToCheck = [
+        new Date().toISOString().split('T')[0],
+        new Date(Date.now() - 86400000).toISOString().split('T')[0]
+    ];
+    
+    for (const date of datesToCheck) {
+        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${date}`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+            const doc = await resp.json();
+            // Parsing manuel rapide
+            const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
+            
+            for (const mRaw of marketsRaw) {
+                // Check slug match inside the raw structure
+                // structure: { mapValue: { fields: { slug: { stringValue: "..." } } } }
+                const mSlug = mRaw.mapValue?.fields?.slug?.stringValue;
+                
+                // Comparaison souple (parfois le slug change légèrement ou c'est l'ID)
+                if (mSlug === slug || (mSlug && slug.includes(mSlug)) || (mSlug && mSlug.includes(slug))) {
+                     // Found it! Parse and return.
+                     const parseValue = (val) => {
+                        if (val.stringValue !== undefined) return val.stringValue;
+                        if (val.integerValue !== undefined) return Number(val.integerValue);
+                        if (val.doubleValue !== undefined) return Number(val.doubleValue);
+                        if (val.booleanValue !== undefined) return val.booleanValue;
+                        if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
+                        if (val.mapValue !== undefined) {
+                            const obj = {};
+                            for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
+                                obj[k] = parseValue(v);
+                            }
+                            return obj;
+                        }
+                        return null;
+                     };
+                     return res.json(parseValue(mRaw.mapValue));
+                }
+            }
+        }
+    }
+    
+    return res.status(404).json({ error: 'Analysis not found' });
+    
+  } catch (e) {
+    console.error('Find error:', e);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// Endpoint léger pour récupérer les analyses du jour (pour l'extension)
+app.get('/api/picks/today', async (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Cache simple serveur pour ne pas spammer Firestore à chaque appel d'extension
+  if (polyCache.dailyPicks && polyCache.dailyPicksDate === today && Date.now() < polyCache.dailyPicksExpires) {
+    return res.json(polyCache.dailyPicks);
+  }
+
+  try {
+    // URL Firestore REST directe (puisque public en lecture) ou via Admin SDK si dispo (ici on n'a pas admin sdk init dans server.js, on a juste express)
+    // Ah, server.js n'a pas firebase-admin initialisé, c'est functions/index.js qui l'a.
+    // server.js est le serveur de dev/prod frontend node. 
+    // On va utiliser l'API REST Firestore public puisque les règles l'autorisent.
+    
+    const projectId = 'metapolymarket-140799832958'; // ID du projet
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${today}`;
+    
+    const resp = await fetch(url);
+    if (!resp.ok) {
+        // Si 404 (pas encore généré ajd), on essaie hier ? Ou on renvoie vide.
+        return res.json({ date: today, markets: [] });
+    }
+    
+    const doc = await resp.json();
+    
+    // Parser la structure Firestore REST horrible
+    // fields: { markets: { arrayValue: { values: [ { mapValue: { fields: ... } } ] } } }
+    const parseValue = (val) => {
+        if (val.stringValue !== undefined) return val.stringValue;
+        if (val.integerValue !== undefined) return Number(val.integerValue);
+        if (val.doubleValue !== undefined) return Number(val.doubleValue);
+        if (val.booleanValue !== undefined) return val.booleanValue;
+        if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
+        if (val.mapValue !== undefined) {
+            const obj = {};
+            for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
+                obj[k] = parseValue(v);
+            }
+            return obj;
+        }
+        return null;
+    };
+    
+    const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
+    const markets = marketsRaw.map(parseValue);
+    
+    // Mettre en cache pour 5 minutes
+    polyCache.dailyPicks = { date: today, markets };
+    polyCache.dailyPicksDate = today;
+    polyCache.dailyPicksExpires = Date.now() + 5 * 60 * 1000;
+    
+    res.json({ date: today, markets });
+  } catch (e) {
+    console.error('Error fetching picks:', e);
+    res.status(500).json({ error: 'Failed to fetch picks' });
+  }
+});
+
 // Route proxy backend pour Polymarket (évite corsproxy.io)
 app.get('/api/polymarket/events', async (req, res) => {
   try {
