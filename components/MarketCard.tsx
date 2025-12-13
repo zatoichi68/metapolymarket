@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MarketAnalysis } from '../types';
-import { ArrowUpRight, Bookmark, Sparkles, ExternalLink, BrainCircuit } from 'lucide-react';
+import { ArrowUpRight, Bookmark, Sparkles, ExternalLink, BrainCircuit, Rocket } from 'lucide-react';
 
 interface MarketCardProps {
   market: MarketAnalysis;
@@ -115,6 +115,14 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
                  {market.kellyPercentage > 0 && (
                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
                      Kelly {market.kellyPercentage.toFixed(1)}%
+                   </span>
+                 )}
+                 {market.probChange !== undefined && market.probChange > 0.02 && calculatedEdge > 0.05 && (
+                   <span 
+                     className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold flex items-center gap-1 animate-pulse"
+                     title={`Trending: Price up ${(market.probChange * 100).toFixed(1)}% today with positive AI edge`}
+                   >
+                     <Rocket size={10} /> Trend
                    </span>
                  )}
                  <button 

@@ -563,7 +563,8 @@ async function saveToFirestore(markets) {
           delete cleanMarket[key];
         }
       });
-      return cleanMarket;
+      // Initialize trend change to 0 for daily start
+      return { ...cleanMarket, probChange: 0 };
     }),
     updatedAt: new Date().toISOString()
   });
@@ -608,6 +609,22 @@ async function saveToFirestore(markets) {
 async function saveToHourlyFirestore(markets) {
   const now = new Date();
   const hourKey = now.toISOString().slice(0, 13).replace('T', '-'); // e.g., "2025-12-04-05"
+  const today = now.toISOString().split('T')[0];
+
+  // Fetch daily opening prices to calculate intraday trend
+  let startPrices = new Map();
+  try {
+    const dailyRef = db.collection('daily_picks').doc(today);
+    const dailySnap = await dailyRef.get();
+    if (dailySnap.exists) {
+        const dailyData = dailySnap.data();
+        (dailyData.markets || []).forEach(m => {
+            startPrices.set(m.id, Number(m.marketProb) || 0);
+        });
+    }
+  } catch (e) {
+    console.warn("Could not fetch daily picks for trend calculation:", e);
+  }
   
   const hourlyPicksRef = db.collection('hourly_picks').doc(hourKey);
   await hourlyPicksRef.set({
@@ -620,6 +637,16 @@ async function saveToHourlyFirestore(markets) {
           delete cleanMarket[key];
         }
       });
+      
+      // Calculate intraday probability change
+      const startProb = startPrices.get(m.id);
+      // If new market today, probChange is 0 (or undefined)
+      if (startProb !== undefined) {
+          cleanMarket.probChange = m.marketProb - startProb;
+      } else {
+          cleanMarket.probChange = 0;
+      }
+
       return cleanMarket;
     }),
     updatedAt: now.toISOString()
@@ -628,8 +655,6 @@ async function saveToHourlyFirestore(markets) {
   console.log(`Saved ${markets.length} hourly markets to Firestore for ${hourKey}`);
 
   // === MERGE INTO HISTORY ===
-  // Also add NEW unique markets to the daily prediction_history to ensure they are tracked for backtesting
-  const today = now.toISOString().split('T')[0];
   const historyRef = db.collection('prediction_history').doc(today);
   
   try {

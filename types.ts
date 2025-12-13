@@ -31,6 +31,7 @@ export interface MarketAnalysis {
   confidence: number; // Meta-Oracle confidence level (1-10)
   kellyPercentage: number; // Kelly criterion: optimal bet size as % of bankroll
   riskFactor: string; // Principal risk factor that could invalidate the prediction
+  probChange?: number; // Change in market probability since start of day (intraday trend)
   endDate?: string;
 }
 
