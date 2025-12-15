@@ -121,6 +121,10 @@ const computeKellyPercentage = ({
   let f = (b * p - q) / b;
   if (!Number.isFinite(f)) f = 0;
 
+  // AJUSTEMENT: Fractional Kelly (0.3x) pour réduire la volatilité et protéger contre l'incertitude du modèle
+  // Full Kelly est trop agressif quand "p" est une estimation IA imparfaite.
+  f = f * 0.3;
+
   // Option A sans levier: clamp [0, 1] => [0%, 100%]
   f = Math.max(0, Math.min(1, f));
   return Math.round(f * 10000) / 100; // 2 décimales

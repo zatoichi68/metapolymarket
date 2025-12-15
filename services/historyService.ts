@@ -215,9 +215,11 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
         // Normalise kellyPercentage from history record (stored as percent, e.g. 12.5 for 12.5%)
         // Option A: bankroll compounding sans levier.
         // On borne la mise Kelly à [0%, 100%] pour éviter une perte > 100% (levier).
+        // EDIT: On force un fractional Kelly (0.3x) rétroactivement pour le backtest
+        // car les données historiques étaient en Full Kelly (trop agressif).
         const kellyPctRaw =
           typeof p.kellyPercentage === 'number' && Number.isFinite(p.kellyPercentage)
-            ? p.kellyPercentage
+            ? p.kellyPercentage * 0.3 
             : 0;
         const kellyPct = Math.max(0, Math.min(100, kellyPctRaw));
         
