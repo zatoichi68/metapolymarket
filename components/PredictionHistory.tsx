@@ -344,10 +344,10 @@ export const PredictionHistory: React.FC<PredictionHistoryProps> = ({ isOpen, on
                         </div>
                         <div className="bg-slate-800 p-4 rounded-lg text-center relative">
                           <div className="absolute top-2 right-2">
-                            <InfoTooltip content="ROI composé (bankroll) en suivant la mise Kelly (bornée à 0–100%: pas de levier). Ne peut pas descendre sous -100%." />
+                            <InfoTooltip content="Compound ROI (bankroll growth) using Kelly betting strategy (capped at 0-100%, no leverage). Max drawdown is -100%." />
                           </div>
                           <TrendingUp className="mx-auto mb-2 text-emerald-400" size={32} />
-                          <h3 className="text-lg font-bold text-white">Kelly ROI (composé)</h3>
+                          <h3 className="text-lg font-bold text-white">Kelly ROI (Compounded)</h3>
                           <p
                             className={`text-2xl font-bold ${
                               resolvedData.stats.kellyROI >= 0 ? 'text-emerald-400' : 'text-red-400'
