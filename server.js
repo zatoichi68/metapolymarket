@@ -292,7 +292,7 @@ app.get('/api/polymarket/events', async (req, res) => {
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
     const resp = await fetch(url, {
-      headers: { 'User-Agent': 'metapolymarket/1.0' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MetaPolymarket/1.0; +https://metapolymarket.com)' },
       signal: controller.signal
     }).catch((e) => {
       if (e.name === 'AbortError') {
