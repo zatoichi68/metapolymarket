@@ -382,7 +382,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.json(cached.data);
     }
     
-    const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. Prefer "no-bet" to overconfidence.
+    const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. 
 
 Context
 - Date: ${today}
@@ -391,39 +391,20 @@ Context
 - Market odds: ${currentOdds}
 - Volume: $${(volume || 0).toLocaleString()}
 
-Protocol (keep it lean)
-0) Hard rule: start from market odds as your prior. If you lack strong evidence, stay within ±3 points of market.
-1) Rules check: flag traps/ambiguities, unclear resolution, or missing info.
-2) Signals (one short line each; factual, not vibes):
-   - Data: base rates/stats/polls.
-   - Sentiment: crowd/media momentum.
-   - Contrarian: hidden risks/why consensus fails.
-3) Synthesis: output aiProbability as the probability of "${outcomeA}" ONLY (0-1). Your recommended prediction MUST be one of the two outcomes.
-4) Discipline:
-   - If market odds are extreme (<=5% or >=95%), set kellyPercentage=0 (micro-edge + tiny payout => unstable).
-   - If your edge vs market is < 2 points, set kellyPercentage=0.
-   - If the question is short-horizon/noisy (sports, crypto <24h, rumor-based announcements), default to market odds and kellyPercentage=0 unless a confirmed catalyst exists.
+Protocol (Critical for Brier Score)
+1) Anchoring: Start at market odds. Only deviate if you have a CLEAR, DOCUMENTED reason.
+2) Conservative Bias: If evidence is mixed, stay WITHIN ±2% of market odds.
+3) No Extremes: Never exceed 90% or go below 10% unless the event is virtually certain (e.g., historical fact).
+4) Synthesis: Output aiProbability for "${outcomeA}". 
 
-Specific Rules for Accuracy:
-- SPORTS: Never output implied confidence above 70% unless there is deterministic information (injury news, lineup lock, etc). Upsets happen constantly.
-- CRYPTO/FINANCE (Short Term < 24h): Assume near 50/50 randomness ("Random Walk") unless there is a massive, confirmed catalyst. If no catalyst, default to market odds or 50/50 with Kelly% = 0.
-- NEWS/ANNOUNCEMENTS: If asking "Will X happen by [Date]?" and no news yet, default to "No" (Status Quo) with high confidence. Do not bet "Yes" on rumors alone.
-
-If data is missing, state a brief assumption instead of guessing.
-
-Return ONLY raw JSON (no markdown, no code fences):
-- aiProbability: number 0-1 for "${outcomeA}" ONLY
-- prediction: "${outcomeA}" or "${outcomeB}" (your bet)
-- reasoning: 2-3 sentences, <= 420 chars, summary of signals + edge
+Return ONLY raw JSON:
+- aiProbability: number 0-1 (calibrated)
+- prediction: "${outcomeA}" or "${outcomeB}"
+- reasoning: 2 sentences max
 - category: Politics | Crypto | Sports | Business | Other
-- kellyPercentage: number 0-100
-- confidence: number 1-10
-- riskFactor: main risk to the forecast
-
-Critical rules for aiProbability:
-- Always for "${outcomeA}" (first outcome), not necessarily the predicted one.
-- If you predict "${outcomeB}" with 80% confidence -> aiProbability = 0.20.
-- If you predict "${outcomeA}" with 70% confidence -> aiProbability = 0.70.`;
+- kellyPercentage: 0-100 (keep it low for safety)
+- confidence: 1-10
+- riskFactor: main risk`;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -458,9 +439,17 @@ Critical rules for aiProbability:
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleanText);
     
-    const aiProbability = parsed.aiProbability ?? marketProb;
+    let aiProbability = parsed.aiProbability ?? marketProb;
     const prediction = parsed.prediction ?? outcomeA;
     const confidence = parsed.confidence ?? 5;
+
+    // AMÉLIORATION BRIER SCORE : Calibration par lissage (Shrinkage)
+    // On mélange la prédiction IA avec celle du marché (60% IA / 40% Marché)
+    // Cela réduit l'erreur quadratique quand l'IA est sur-confiante.
+    aiProbability = (aiProbability * 0.6) + (marketProb * 0.4);
+
+    // Plafonnement (Clamp) pour éviter les certitudes excessives qui détruisent le Brier Score
+    aiProbability = Math.max(0.05, Math.min(0.95, aiProbability));
 
     const payload = {
       aiProbability,
@@ -477,7 +466,7 @@ Critical rules for aiProbability:
       }),
       confidence,
       riskFactor: parsed.riskFactor ?? "Market volatility",
-      edge: (aiProbability ?? marketProb) - marketProb
+      edge: aiProbability - marketProb
     };
 
     analysisCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS });

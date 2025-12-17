@@ -268,7 +268,7 @@ async function analyzeMarket(title, outcomes, marketProb, volume, apiKey) {
   const outcomeB = outcomes[1] || "Other";
   const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
 
-  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. Prefer "no-bet" to overconfidence.
+  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. 
 
 Context
 - Date: ${today}
@@ -277,39 +277,20 @@ Context
 - Market odds: ${currentOdds}
 - Volume: $${(volume || 0).toLocaleString()}
 
-Protocol (keep it lean)
-0) Hard rule: start from market odds as your prior. If you lack strong evidence, stay within ±3 points of market.
-1) Rules check: flag traps/ambiguities, unclear resolution, or missing info.
-2) Signals (one short line each; factual, not vibes):
-   - Data: base rates/stats/polls.
-   - Sentiment: crowd/media momentum.
-   - Contrarian: hidden risks/why consensus fails.
-3) Synthesis: output aiProbability as the probability of "${outcomeA}" ONLY (0-1). Your recommended prediction MUST be one of the two outcomes.
-4) Discipline:
-   - If market odds are extreme (<=5% or >=95%), set kellyPercentage=0 (micro-edge + tiny payout => unstable).
-   - If your edge vs market is < 2 points, set kellyPercentage=0.
-   - If the question is short-horizon/noisy (sports, crypto <24h, rumor-based announcements), default to market odds and kellyPercentage=0 unless a confirmed catalyst exists.
+Protocol (Critical for Brier Score)
+1) Anchoring: Start at market odds. Only deviate if you have a CLEAR, DOCUMENTED reason.
+2) Conservative Bias: If evidence is mixed, stay WITHIN ±2% of market odds.
+3) No Extremes: Never exceed 90% or go below 10% unless the event is virtually certain (e.g., historical fact).
+4) Synthesis: Output aiProbability for "${outcomeA}". 
 
-Specific Rules for Accuracy:
-- SPORTS: Never output implied confidence above 70% unless there is deterministic information (injury news, lineup lock, etc). Upsets happen constantly.
-- CRYPTO/FINANCE (Short Term < 24h): Assume near 50/50 randomness ("Random Walk") unless there is a massive, confirmed catalyst. If no catalyst, default to market odds or 50/50 with Kelly% = 0.
-- NEWS/ANNOUNCEMENTS: If asking "Will X happen by [Date]?" and no news yet, default to "No" (Status Quo) with high confidence. Do not bet "Yes" on rumors alone.
-
-If data is missing, state a brief assumption instead of guessing.
-
-Return ONLY raw JSON (no markdown, no code fences):
-- aiProbability: number 0-1 for "${outcomeA}" ONLY
-- prediction: "${outcomeA}" or "${outcomeB}" (your bet)
-- reasoning: 2-3 sentences, <= 420 chars, summary of signals + edge
+Return ONLY raw JSON:
+- aiProbability: number 0-1 (calibrated)
+- prediction: "${outcomeA}" or "${outcomeB}"
+- reasoning: 2 sentences max
 - category: Politics | Crypto | Sports | Business | Other
-- kellyPercentage: number 0-100
-- confidence: number 1-10
-- riskFactor: main risk to the forecast
-
-Critical rules for aiProbability:
-- Always for "${outcomeA}" (first outcome), not necessarily the predicted one.
-- If you predict "${outcomeB}" with 80% confidence -> aiProbability = 0.20.
-- If you predict "${outcomeA}" with 70% confidence -> aiProbability = 0.70.`;
+- kellyPercentage: 0-100 (keep it low for safety)
+- confidence: 1-10
+- riskFactor: main risk`;
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -473,10 +454,15 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         apiKey
       ]);
 
-      const aiProb = analysis.aiProbability ?? prob;
+      let aiProb = analysis.aiProbability ?? prob;
       const prediction = analysis.prediction ?? outcomes[0];
       const confidence = analysis.confidence ?? 5;
       
+      // AMÉLIORATION BRIER SCORE : Calibration par lissage (Shrinkage)
+      // On mélange (60% IA / 40% Marché) et on plafonne à [0.05, 0.95]
+      aiProb = (aiProb * 0.6) + (prob * 0.4);
+      aiProb = Math.max(0.05, Math.min(0.95, aiProb));
+
       // Calculate edge correctly based on which outcome is predicted
       // aiProb is ALWAYS for outcomes[0] (first outcome)
       // If predicting outcomes[0]: edge = aiProb - prob
