@@ -836,7 +836,7 @@ const App: React.FC = () => {
                 <li><button onClick={() => setShowHowItWorks(true)} className="hover:text-blue-400 transition-colors">How AI Analysis Works</button></li>
                 <li><button onClick={() => setShowHistory(true)} className="hover:text-blue-400 transition-colors">Prediction History</button></li>
                 <li><button onClick={() => setShowPremiumModal(true)} className="hover:text-amber-400 transition-colors">Premium Access</button></li>
-                <li><a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Visit Polymarket</a></li>
+                <li><a href="https://polymarket.com?via=steve-rioux" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Visit Polymarket</a></li>
               </ul>
             </div>
           </div>

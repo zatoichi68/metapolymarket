@@ -119,7 +119,7 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                       </div>
                       
                       <button
-                        onClick={() => onBet(`https://polymarket.com/event/${market.slug}`)}
+                        onClick={() => onBet(`https://polymarket.com/event/${market.slug}?via=steve-rioux`)}
                         className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5 transition-all ${
                           isHot 
                             ? 'bg-orange-500 hover:bg-orange-400 text-white' 

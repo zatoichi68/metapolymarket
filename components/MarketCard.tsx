@@ -156,7 +156,7 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
 
             {/* BET Button */}
             <button 
-              onClick={(e) => { e.preventDefault(); onBet(`https://polymarket.com/event/${market.slug}`); }}
+              onClick={(e) => { e.preventDefault(); onBet(`https://polymarket.com/event/${market.slug}?via=steve-rioux`); }}
               className={`h-9 px-5 rounded-md text-xs font-bold uppercase tracking-wide border transition-all active:scale-95 flex items-center justify-center ${buttonClass}`}
             >
                 BET
@@ -189,7 +189,7 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
             
             {/* Title - Linked */}
             <a 
-              href={`https://polymarket.com/event/${market.slug}`} 
+              href={`https://polymarket.com/event/${market.slug}?via=steve-rioux`} 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex-1 group/title"

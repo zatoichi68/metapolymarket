@@ -183,7 +183,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
         {/* Footer Action */}
         <div className="p-5 border-t border-slate-800 bg-slate-900/50">
             <button 
-              onClick={() => { onClose(); onBet(`https://polymarket.com/event/${market.slug || market.id}`); }}
+              onClick={() => { onClose(); onBet(`https://polymarket.com/event/${market.slug || market.id}?via=steve-rioux`); }}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-purple-900/20"
             >
                 Execute Trade on Polymarket <ExternalLink size={18} />
