@@ -14,6 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // En demandant au background le badge text de cet onglet
         chrome.action.getBadgeText({ tabId: tabs[0].id }, (text) => {
             countEl.textContent = text || '0';
-        });
+      });
     });
 });

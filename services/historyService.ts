@@ -102,10 +102,10 @@ export const getFavoritedMarketsFromHistory = async (favoriteIds: string[]): Pro
     // Get last 30 days of history to find favorited markets
     const history = await getPredictionHistory(30);
     const allPredictions = history.flatMap(h => h.predictions);
-    
+
     // Find predictions that match favorite IDs
     const favoritePredictions = allPredictions.filter(p => favoriteIds.includes(p.marketId));
-    
+
     // Remove duplicates (keep most recent)
     const uniqueMap = new Map<string, PredictionRecord>();
     favoritePredictions.forEach(p => {
@@ -178,19 +178,19 @@ export const calculateOverallStats = (history: { date: string; predictions: Pred
  */
 export const getResolvedPredictions = async (limitCount = 100): Promise<{ predictions: ResolvedPrediction[], stats: BacktestStats } | null> => {
   if (!db) return null;
-  
+
   try {
     // 1. Get historical predictions (last 30 days)
     const historyRef = collection(db, 'prediction_history');
-    const q = query(historyRef, orderBy('date', 'desc'), limit(30)); 
+    const q = query(historyRef, orderBy('date', 'desc'), limit(30));
     const snapshot = await getDocs(q);
-    
+
     let allPredictions: PredictionRecord[] = [];
     snapshot.docs.forEach(doc => {
       const data = doc.data();
       allPredictions = allPredictions.concat(data.predictions || []);
     });
-    
+
     if (allPredictions.length === 0) return null;
 
     // 2. Fetch resolved markets from Polymarket and map by marketId
@@ -212,17 +212,17 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
         const predictedOutcome = p.aiPrediction || outcomes[0];
         const isPredFirst = predictedOutcome === outcomes[0];
 
-        // Normalise kellyPercentage from history record (stored as percent, e.g. 12.5 for 12.5%)
         // Option A: bankroll compounding sans levier.
-        // On borne la mise Kelly à [0%, 100%] pour éviter une perte > 100% (levier).
-        // EDIT: On force un fractional Kelly (0.3x) rétroactivement pour le backtest
+        // On force un fractional Kelly (0.1x) rétroactivement pour le backtest
         // car les données historiques étaient en Full Kelly (trop agressif).
+        // Cela permet de voir si la stratégie devient rentable avec moins de levier.
         const kellyPctRaw =
           typeof p.kellyPercentage === 'number' && Number.isFinite(p.kellyPercentage)
-            ? p.kellyPercentage * 0.3 
+            ? p.kellyPercentage * 0.1
             : 0;
-        const kellyPct = Math.max(0, Math.min(100, kellyPctRaw));
-        
+        // On cap à 10% max du bankroll par trade pour le backtest
+        const kellyPct = Math.max(0, Math.min(10, kellyPctRaw));
+
         // entryPrice est le prix payé pour l'outcome prédit au moment de la prédiction
         const entryPrice = isPredFirst ? p.marketProb : (1 - p.marketProb);
         const safeEntryPrice = Math.max(0.01, Math.min(0.99, entryPrice)); // Bornes de sécurité
@@ -249,17 +249,17 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
         // ROI Kelly Réel (Compound Growth)
         const wasCorrect = actualProb === 1;
         const kellyFrac = kellyPct / 100;
-        
+
         let kellyReturn = 0;
         if (wasCorrect) {
-            // Gain net = (Payout - Cost) / Cost = (1 - Price) / Price
-            // Impact Bankroll = KellyFraction * GainNet
-            const profitMargin = (1 - safeEntryPrice) / safeEntryPrice;
-            kellyReturn = kellyFrac * profitMargin;
+          // Gain net = (Payout - Cost) / Cost = (1 - Price) / Price
+          // Impact Bankroll = KellyFraction * GainNet
+          const profitMargin = (1 - safeEntryPrice) / safeEntryPrice;
+          kellyReturn = kellyFrac * profitMargin;
         } else {
-            // Perte nette = -100% de la mise
-            // Impact Bankroll = -KellyFraction
-            kellyReturn = -kellyFrac;
+          // Perte nette = -100% de la mise
+          // Impact Bankroll = -KellyFraction
+          kellyReturn = -kellyFrac;
         }
 
         // Sécurité: en modèle sans levier, le retour d'un trade ne doit jamais être <= -100%.
@@ -296,9 +296,9 @@ export const getResolvedPredictions = async (limitCount = 100): Promise<{ predic
 
     // 3. Calculate stats
     const stats: BacktestStats = calculateBacktestStats(resolvedPredictions);
-    
+
     return { predictions: resolvedPredictions, stats };
-    
+
   } catch (error) {
     console.error('Error fetching resolved predictions:', error);
     return null;
@@ -320,31 +320,31 @@ export const calculateBacktestStats = (resolved: ResolvedPrediction[]): Backtest
       overTime: []
     };
   }
-  
+
   const total = resolved.length;
   const correct = resolved.filter(p => p.wasCorrect).length;
   const accuracy = (correct / total) * 100;
   const brierScore = resolved.reduce((sum, p) => sum + p.brierError, 0);
   const avgBrier = brierScore / total;
-  
+
   // Calcul ROI composé (Cumulative Bankroll Growth)
   // Bankroll_fin = Bankroll_init * product(1 + return_i)
   // ROI = (Bankroll_fin / Bankroll_init) - 1
   // On trie par date pour simuler l'évolution chronologique (important si on voulait faire un stop-loss, ici mathématiquement le produit est commutatif mais bon)
   const sortedResolved = [...resolved].sort((a, b) => new Date((a as any).date).getTime() - new Date((b as any).date).getTime());
-  
+
   let bankrollMultiplier = 1.0;
   sortedResolved.forEach(p => {
-      // Protection contre faillite totale (si kellyReturn <= -1, on est mort)
-      // Kelly fractional est sensé éviter ça, mais on cap à -99% par trade au cas où
-      const safeReturn = Math.max(-0.99, p.kellyReturn);
-      bankrollMultiplier *= (1 + safeReturn);
+    // Protection contre faillite totale (si kellyReturn <= -1, on est mort)
+    // Kelly fractional est sensé éviter ça, mais on cap à -99% par trade au cas où
+    const safeReturn = Math.max(-0.99, p.kellyReturn);
+    bankrollMultiplier *= (1 + safeReturn);
   });
-  
+
   const kellyROI = bankrollMultiplier - 1; // Ex: 1.5 -> +0.5 (+50%)
 
   const winRate = (resolved.filter(p => p.kellyReturn > 0).length / total) * 100;
-  
+
   // Over time (group by date)
   const overTime = Array.from(
     resolved.reduce((acc, p) => {
@@ -355,7 +355,7 @@ export const calculateBacktestStats = (resolved: ResolvedPrediction[]): Backtest
       return acc;
     }, new Map<string, number>())
   ).sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }));
-  
+
   return {
     total,
     accuracy,

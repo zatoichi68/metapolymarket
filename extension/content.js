@@ -124,7 +124,7 @@
         } else {
              if (btn) btn.innerHTML = `<span class="polytrader-pred" style="font-size:11px; color:#ef4444;">Error</span>`;
         }
-    } catch (e) {
+      } catch (e) {
         if (btn) btn.innerHTML = `<span class="polytrader-pred" style="font-size:11px; color:#ef4444;">Failed</span>`;
     }
   };
@@ -247,9 +247,9 @@
     if (isLoading) {
         overlay.innerHTML = `<span class="polytrader-pred" style="font-size:11px; color:#ccc;">Analyzing...</span>`;
         element.appendChild(overlay);
-        return;
+       return; 
     }
-
+    
     const { prediction, confidence, kellyPercentage } = analysis;
     const color = (kellyPercentage > 0) ? '#00fa9a' : '#fbbf24'; 
     const borderColor = (kellyPercentage > 0) ? 'rgba(0, 250, 154, 0.4)' : 'rgba(251, 191, 36, 0.4)';
@@ -333,7 +333,7 @@
                 if (!hasOtherSlugs) {
                     card = p;
                     foundCard = true;
-                }
+    }
             }
             if (foundCard) break;
             card = p;

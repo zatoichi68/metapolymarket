@@ -27,7 +27,7 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        
+
         {/* Header */}
         <div className="p-6 border-b border-slate-800 flex items-center justify-between flex-shrink-0 bg-gradient-to-r from-orange-500/10 to-red-500/10">
           <div>
@@ -71,23 +71,21 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
 
                 const edgePercent = Math.abs(displayEdge) * 100;
                 const isHot = edgePercent >= 15;
-                
+
                 return (
-                  <div 
+                  <div
                     key={market.id}
-                    className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${
-                      isHot 
-                        ? 'bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/50' 
+                    className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${isHot
+                        ? 'bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/50'
                         : 'bg-slate-800/50 border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           {isHot && <Flame size={16} className="text-orange-400 animate-pulse" />}
-                          <span className={`text-xs font-bold uppercase tracking-wide ${
-                            isHot ? 'text-orange-400' : 'text-emerald-400'
-                          }`}>
+                          <span className={`text-xs font-bold uppercase tracking-wide ${isHot ? 'text-orange-400' : 'text-emerald-400'
+                            }`}>
                             +{edgePercent.toFixed(1)}% Edge
                           </span>
                           {market.kellyPercentage > 0 && (
@@ -96,14 +94,14 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                             </span>
                           )}
                         </div>
-                        
-                        <h3 
+
+                        <h3
                           className="text-white font-medium mb-2 cursor-pointer hover:text-blue-400 transition-colors"
                           onClick={() => { onMarketClick(market); }}
                         >
                           {market.title}
                         </h3>
-                        
+
                         <div className="flex items-center gap-4 text-sm">
                           <div className="flex items-center gap-1.5 text-slate-400">
                             <Target size={14} />
@@ -117,14 +115,16 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                           </div>
                         </div>
                       </div>
-                      
+
                       <button
-                        onClick={() => onBet(`https://polymarket.com/event/${market.slug}?via=steve-rioux`)}
-                        className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5 transition-all ${
-                          isHot 
-                            ? 'bg-orange-500 hover:bg-orange-400 text-white' 
+                        onClick={() => {
+                          const baseUrl = (import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com';
+                          onBet(`https://${baseUrl}/event/${market.slug}?via=steve-rioux`);
+                        }}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5 transition-all ${isHot
+                            ? 'bg-orange-500 hover:bg-orange-400 text-white'
                             : 'bg-emerald-500 hover:bg-emerald-400 text-white'
-                        }`}
+                          }`}
                       >
                         BET <ExternalLink size={14} />
                       </button>

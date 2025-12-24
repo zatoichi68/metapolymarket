@@ -17,7 +17,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-XSS-Protection', '0');
-  
+
   // Allow CORS from Polymarket and Extension
   const origin = req.headers.origin;
   if (origin && (origin.includes('polymarket.com') || origin.startsWith('chrome-extension://'))) {
@@ -34,7 +34,7 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   next();
 });
 
@@ -143,54 +143,54 @@ app.get('/api/picks/find', async (req, res) => {
     // Stratégie : Chercher dans daily_picks d'aujourd'hui (déjà fait par l'extension mais bon)
     // Et chercher dans prediction_history (qui est archivé par date).
     // Firestore REST API search n'est pas trivial sans index.
-    
+
     // TRICHE EFFICACE : On suppose que l'analyse est récente (aujourd'hui ou hier).
     // On va fetcher daily_picks d'aujourd'hui et d'hier.
-    
+
     const datesToCheck = [
-        new Date().toISOString().split('T')[0],
-        new Date(Date.now() - 86400000).toISOString().split('T')[0]
+      new Date().toISOString().split('T')[0],
+      new Date(Date.now() - 86400000).toISOString().split('T')[0]
     ];
-    
+
     for (const date of datesToCheck) {
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${date}`;
-        const resp = await fetch(url);
-        if (resp.ok) {
-            const doc = await resp.json();
-            // Parsing manuel rapide
-            const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
-            
-            for (const mRaw of marketsRaw) {
-                // Check slug match inside the raw structure
-                // structure: { mapValue: { fields: { slug: { stringValue: "..." } } } }
-                const mSlug = mRaw.mapValue?.fields?.slug?.stringValue;
-                
-                // Comparaison souple (parfois le slug change légèrement ou c'est l'ID)
-                if (mSlug === slug || (mSlug && slug.includes(mSlug)) || (mSlug && mSlug.includes(slug))) {
-                     // Found it! Parse and return.
-                     const parseValue = (val) => {
-                        if (val.stringValue !== undefined) return val.stringValue;
-                        if (val.integerValue !== undefined) return Number(val.integerValue);
-                        if (val.doubleValue !== undefined) return Number(val.doubleValue);
-                        if (val.booleanValue !== undefined) return val.booleanValue;
-                        if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
-                        if (val.mapValue !== undefined) {
-                            const obj = {};
-                            for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
-                                obj[k] = parseValue(v);
-                            }
-                            return obj;
-                        }
-                        return null;
-                     };
-                     return res.json(parseValue(mRaw.mapValue));
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${date}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const doc = await resp.json();
+        // Parsing manuel rapide
+        const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
+
+        for (const mRaw of marketsRaw) {
+          // Check slug match inside the raw structure
+          // structure: { mapValue: { fields: { slug: { stringValue: "..." } } } }
+          const mSlug = mRaw.mapValue?.fields?.slug?.stringValue;
+
+          // Comparaison souple (parfois le slug change légèrement ou c'est l'ID)
+          if (mSlug === slug || (mSlug && slug.includes(mSlug)) || (mSlug && mSlug.includes(slug))) {
+            // Found it! Parse and return.
+            const parseValue = (val) => {
+              if (val.stringValue !== undefined) return val.stringValue;
+              if (val.integerValue !== undefined) return Number(val.integerValue);
+              if (val.doubleValue !== undefined) return Number(val.doubleValue);
+              if (val.booleanValue !== undefined) return val.booleanValue;
+              if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
+              if (val.mapValue !== undefined) {
+                const obj = {};
+                for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
+                  obj[k] = parseValue(v);
                 }
-            }
+                return obj;
+              }
+              return null;
+            };
+            return res.json(parseValue(mRaw.mapValue));
+          }
         }
+      }
     }
-    
+
     return res.status(404).json({ error: 'Analysis not found' });
-    
+
   } catch (e) {
     console.error('Find error:', e);
     res.status(500).json({ error: 'Search failed' });
@@ -200,7 +200,7 @@ app.get('/api/picks/find', async (req, res) => {
 // Endpoint léger pour récupérer les analyses du jour (pour l'extension)
 app.get('/api/picks/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
-  
+
   // Cache simple serveur pour ne pas spammer Firestore à chaque appel d'extension
   if (polyCache.dailyPicks && polyCache.dailyPicksDate === today && Date.now() < polyCache.dailyPicksExpires) {
     return res.json(polyCache.dailyPicks);
@@ -211,44 +211,44 @@ app.get('/api/picks/today', async (req, res) => {
     // Ah, server.js n'a pas firebase-admin initialisé, c'est functions/index.js qui l'a.
     // server.js est le serveur de dev/prod frontend node. 
     // On va utiliser l'API REST Firestore public puisque les règles l'autorisent.
-    
+
     const projectId = 'metapolymarket-140799832958'; // ID du projet
     const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${today}`;
-    
+
     const resp = await fetch(url);
     if (!resp.ok) {
-        // Si 404 (pas encore généré ajd), on essaie hier ? Ou on renvoie vide.
-        return res.json({ date: today, markets: [] });
+      // Si 404 (pas encore généré ajd), on essaie hier ? Ou on renvoie vide.
+      return res.json({ date: today, markets: [] });
     }
-    
+
     const doc = await resp.json();
-    
+
     // Parser la structure Firestore REST horrible
     // fields: { markets: { arrayValue: { values: [ { mapValue: { fields: ... } } ] } } }
     const parseValue = (val) => {
-        if (val.stringValue !== undefined) return val.stringValue;
-        if (val.integerValue !== undefined) return Number(val.integerValue);
-        if (val.doubleValue !== undefined) return Number(val.doubleValue);
-        if (val.booleanValue !== undefined) return val.booleanValue;
-        if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
-        if (val.mapValue !== undefined) {
-            const obj = {};
-            for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
-                obj[k] = parseValue(v);
-            }
-            return obj;
+      if (val.stringValue !== undefined) return val.stringValue;
+      if (val.integerValue !== undefined) return Number(val.integerValue);
+      if (val.doubleValue !== undefined) return Number(val.doubleValue);
+      if (val.booleanValue !== undefined) return val.booleanValue;
+      if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
+      if (val.mapValue !== undefined) {
+        const obj = {};
+        for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
+          obj[k] = parseValue(v);
         }
-        return null;
+        return obj;
+      }
+      return null;
     };
-    
+
     const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
     const markets = marketsRaw.map(parseValue);
-    
+
     // Mettre en cache pour 5 minutes
     polyCache.dailyPicks = { date: today, markets };
     polyCache.dailyPicksDate = today;
     polyCache.dailyPicksExpires = Date.now() + 5 * 60 * 1000;
-    
+
     res.json({ date: today, markets });
   } catch (e) {
     console.error('Error fetching picks:', e);
@@ -267,7 +267,7 @@ app.get('/api/polymarket/events', async (req, res) => {
     if (!isAuthenticated) {
       const ip = req.ip || req.connection.remoteAddress || 'unknown';
       // Limite pour les appels publics (proxy events) : 20 requêtes / minute (un peu plus large que analyze)
-      const PUBLIC_PROXY_RATE_LIMIT = 20; 
+      const PUBLIC_PROXY_RATE_LIMIT = 20;
       if (hitRateLimit(ip, PUBLIC_PROXY_RATE_LIMIT)) {
         return res.status(429).json({ error: 'Rate limit exceeded' });
       }
@@ -282,7 +282,7 @@ app.get('/api/polymarket/events', async (req, res) => {
     const limitParam = Math.min(Number(req.query.limit) || 200, 200);
     const closedParam = req.query.closed === 'true';
     const activeParam = req.query.active !== 'false'; // default true unless explicit false
-    
+
     let url = `https://gamma-api.polymarket.com/events?limit=${limitParam}&active=${activeParam}&closed=${closedParam}&order=volume24hr&ascending=false`;
 
     // Handle specific event lookups
@@ -338,18 +338,18 @@ app.post('/api/analyze', async (req, res) => {
   const isAuthenticated = API_AUTH_TOKEN && clientApiKey === API_AUTH_TOKEN;
 
   // Si pas authentifié par token, on applique un rate limit strict par IP
-    if (!isAuthenticated) {
-      const ip = req.ip || req.connection.remoteAddress || 'unknown';
-      // Limite plus stricte pour les anonymes : 25 requêtes / minute (demandé par user)
-      const PUBLIC_RATE_LIMIT_MAX = 25; 
-      if (hitRateLimit(ip, PUBLIC_RATE_LIMIT_MAX)) {
-        return res.status(429).json({ error: 'Rate limit exceeded' });
-      }
+  if (!isAuthenticated) {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    // Limite plus stricte pour les anonymes : 25 requêtes / minute (demandé par user)
+    const PUBLIC_RATE_LIMIT_MAX = 25;
+    if (hitRateLimit(ip, PUBLIC_RATE_LIMIT_MAX)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
     }
+  }
 
   try {
     const { title, outcomes, marketProb, volume } = req.body;
-    
+
     if (!title || !outcomes || marketProb === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -381,7 +381,7 @@ app.post('/api/analyze', async (req, res) => {
     if (cached && cached.expiresAt > Date.now()) {
       return res.json(cached.data);
     }
-    
+
     const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. 
 
 Context
@@ -430,7 +430,7 @@ Return ONLY raw JSON:
 
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content;
-    
+
     if (!text) {
       throw new Error('No response from OpenRouter');
     }
@@ -438,32 +438,45 @@ Return ONLY raw JSON:
     // Clean potential markdown code blocks
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleanText);
-    
+
     let aiProbability = parsed.aiProbability ?? marketProb;
     const prediction = parsed.prediction ?? outcomeA;
     const confidence = parsed.confidence ?? 5;
 
     // AMÉLIORATION BRIER SCORE : Calibration par lissage (Shrinkage)
-    // On mélange la prédiction IA avec celle du marché (60% IA / 40% Marché)
-    // Cela réduit l'erreur quadratique quand l'IA est sur-confiante.
-    aiProbability = (aiProbability * 0.6) + (marketProb * 0.4);
+    // On mélange la prédiction IA avec celle du marché (30% IA / 70% Marché)
+    // Cela réduit drastiquement l'erreur quadratique quand l'IA est sur-confiante.
+    aiProbability = (aiProbability * 0.3) + (marketProb * 0.7);
 
-    // Plafonnement (Clamp) pour éviter les certitudes excessives qui détruisent le Brier Score
-    aiProbability = Math.max(0.05, Math.min(0.95, aiProbability));
+    // Clamping supplémentaire pour éviter les probabilités extrêmes
+    aiProbability = Math.max(0.08, Math.min(0.92, aiProbability));
+
+    const edge = Math.abs(aiProbability - marketProb);
+    const outcomes_arr = outcomes || ["Yes", "No"];
+
+    // Calcul de Kelly conservateur (Quarter-Kelly)
+    // f = (bp - q) / b
+    // b = payout (net odds) = (1/price) - 1
+    const p_kelly = aiProbability >= 0.5 ? aiProbability : (1 - aiProbability);
+    const price_kelly = aiProbability >= 0.5 ? marketProb : (1 - marketProb);
+
+    let kellyPercentage = 0;
+    if (edge > 0.035 && confidence >= 5) { // Seuil d'edge et confiance plus élevé
+      const b = (1 / price_kelly) - 1;
+      const q = 1 - p_kelly;
+      if (b > 0) {
+        const fullKelly = (b * p_kelly - q) / b;
+        // On utilise Quarter-Kelly (0.25) et on cap à 10% max du bankroll
+        kellyPercentage = Math.max(0, Math.min(0.1, fullKelly * 0.25)) * 100;
+      }
+    }
 
     const payload = {
       aiProbability,
       prediction,
       reasoning: parsed.reasoning ?? "Analysis based on market trends.",
       category: parsed.category ?? "Other",
-      // Kelly recalculé (Option A) avec garde-fous
-      kellyPercentage: computeKellyPercentage({
-        aiProbabilityForOutcomeA: aiProbability,
-        prediction,
-        outcomes,
-        marketProbOutcomeA: marketProb,
-        confidence
-      }),
+      kellyPercentage,
       confidence,
       riskFactor: parsed.riskFactor ?? "Market volatility",
       edge: aiProbability - marketProb
@@ -498,7 +511,7 @@ app.get('*', (req, res) => {
   if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
     return res.status(404).send('Not found');
   }
-  
+
   res.sendFile(join(__dirname, 'dist', 'index.html'), {
     headers: {
       'Cache-Control': 'no-cache, no-store, must-revalidate'

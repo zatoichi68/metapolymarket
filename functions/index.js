@@ -239,16 +239,16 @@ export const checkPremiumStatus = onRequest({
   }
 
   const { email } = req.body;
-  
+
   if (!email) {
-     res.status(400).json({ isPremium: false });
-     return;
+    res.status(400).json({ isPremium: false });
+    return;
   }
 
   try {
     const userDoc = await db.collection('premium_users').doc(email).get();
     const isPremium = userDoc.exists && userDoc.data().verified;
-    
+
     res.json({ isPremium });
   } catch (error) {
     console.error('Error checking status:', error);
@@ -331,33 +331,37 @@ const clamp01 = (x) => {
 
 const computeKellyPercentage = ({ aiProbabilityForOutcomeA, prediction, outcomes, marketProbOutcomeA, confidence }) => {
   const outcomeA = outcomes?.[0];
-  const outcomeB = outcomes?.[1] || 'Other';
   const aiA = clamp01(aiProbabilityForOutcomeA);
   const mpA = clamp01(marketProbOutcomeA);
 
   const pred =
-    prediction === outcomeA || prediction === outcomeB
+    prediction === outcomes?.[0] || prediction === outcomes?.[1]
       ? prediction
       : aiA >= 0.5
         ? outcomeA
-        : outcomeB;
+        : outcomes?.[1] || 'No';
 
   const predictedProb = pred === outcomeA ? aiA : 1 - aiA;
   const marketSideProb = pred === outcomeA ? mpA : 1 - mpA;
 
   const conf = Number(confidence);
-  if (Number.isFinite(conf) && conf < 4) return 0;
+  if (Number.isFinite(conf) && conf < 5) return 0; // Seuil de confiance plus strict
   if (marketSideProb <= 0.05 || marketSideProb >= 0.95) return 0;
-  const edgeAbs = Math.abs(predictedProb - marketSideProb);
-  if (edgeAbs < 0.02) return 0;
+
+  const edgeAbs = Math.max(0, predictedProb - marketSideProb);
+  if (edgeAbs < 0.035) return 0; // Seuil d'edge minimum augmenté
 
   const b = (1 / marketSideProb) - 1;
   if (!Number.isFinite(b) || b <= 0) return 0;
   const p = predictedProb;
   const q = 1 - p;
+
   let f = (b * p - q) / b;
   if (!Number.isFinite(f)) f = 0;
-  f = Math.max(0, Math.min(1, f));
+
+  // Quarter-Kelly (0.25) et Cap de 10% (0.10) du bankroll
+  f = Math.max(0, Math.min(0.10, f * 0.25));
+
   return Math.round(f * 10000) / 100;
 };
 
@@ -366,7 +370,7 @@ const computeKellyPercentage = ({ aiProbabilityForOutcomeA, prediction, outcomes
  */
 async function fetchAndAnalyzeMarkets(apiKey) {
   console.log('Fetching markets from Polymarket...');
-  
+
   const response = await fetch(POLYMARKET_API_URL);
   if (!response.ok) {
     throw new Error(`Polymarket API error: ${response.status}`);
@@ -377,21 +381,21 @@ async function fetchAndAnalyzeMarkets(apiKey) {
 
   // Prepare all valid markets first
   const marketsToAnalyze = [];
-  
+
   for (const event of events) {
     const market = event.markets?.[0];
     if (!market || !market.outcomePrices) continue;
 
     try {
-      const prices = typeof market.outcomePrices === 'string' 
-        ? JSON.parse(market.outcomePrices) 
+      const prices = typeof market.outcomePrices === 'string'
+        ? JSON.parse(market.outcomePrices)
         : market.outcomePrices;
-      
+
       const prob = parseFloat(prices[0]);
       if (isNaN(prob) || prob <= 0.01 || prob >= 0.99) continue;
 
       let outcomes = ["Yes", "No"];
-      
+
       // For grouped markets (multi-outcome like "Which movie will win?"),
       // ALWAYS use [groupItemTitle, "Other"] to ensure prices[0] aligns with outcomes[0]
       // prices[0] is always the probability of the specific option winning
@@ -457,11 +461,11 @@ async function fetchAndAnalyzeMarkets(apiKey) {
       let aiProb = analysis.aiProbability ?? prob;
       const prediction = analysis.prediction ?? outcomes[0];
       const confidence = analysis.confidence ?? 5;
-      
+
       // AMÉLIORATION BRIER SCORE : Calibration par lissage (Shrinkage)
-      // On mélange (60% IA / 40% Marché) et on plafonne à [0.05, 0.95]
-      aiProb = (aiProb * 0.6) + (prob * 0.4);
-      aiProb = Math.max(0.05, Math.min(0.95, aiProb));
+      // On mélange (30% IA / 70% Marché) et on plafonne à [0.08, 0.92]
+      aiProb = (aiProb * 0.3) + (prob * 0.7);
+      aiProb = Math.max(0.08, Math.min(0.92, aiProb));
 
       // Calculate edge correctly based on which outcome is predicted
       // aiProb is ALWAYS for outcomes[0] (first outcome)
@@ -536,7 +540,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
  */
 async function saveToFirestore(markets) {
   const today = new Date().toISOString().split('T')[0];
-  
+
   // Save to daily_picks
   const dailyPicksRef = db.collection('daily_picks').doc(today);
   await dailyPicksRef.set({
@@ -603,15 +607,15 @@ async function saveToHourlyFirestore(markets) {
     const dailyRef = db.collection('daily_picks').doc(today);
     const dailySnap = await dailyRef.get();
     if (dailySnap.exists) {
-        const dailyData = dailySnap.data();
-        (dailyData.markets || []).forEach(m => {
-            startPrices.set(m.id, Number(m.marketProb) || 0);
-        });
+      const dailyData = dailySnap.data();
+      (dailyData.markets || []).forEach(m => {
+        startPrices.set(m.id, Number(m.marketProb) || 0);
+      });
     }
   } catch (e) {
     console.warn("Could not fetch daily picks for trend calculation:", e);
   }
-  
+
   const hourlyPicksRef = db.collection('hourly_picks').doc(hourKey);
   await hourlyPicksRef.set({
     timestamp: now.toISOString(),
@@ -623,14 +627,14 @@ async function saveToHourlyFirestore(markets) {
           delete cleanMarket[key];
         }
       });
-      
+
       // Calculate intraday probability change
       const startProb = startPrices.get(m.id);
       // If new market today, probChange is 0 (or undefined)
       if (startProb !== undefined) {
-          cleanMarket.probChange = m.marketProb - startProb;
+        cleanMarket.probChange = m.marketProb - startProb;
       } else {
-          cleanMarket.probChange = 0;
+        cleanMarket.probChange = 0;
       }
 
       return cleanMarket;
@@ -642,65 +646,65 @@ async function saveToHourlyFirestore(markets) {
 
   // === MERGE INTO HISTORY ===
   const historyRef = db.collection('prediction_history').doc(today);
-  
+
   try {
-      const historyDoc = await historyRef.get();
-      let existingPredictions = [];
-      let existingIds = new Set();
+    const historyDoc = await historyRef.get();
+    let existingPredictions = [];
+    let existingIds = new Set();
 
-      if (historyDoc.exists) {
-          const data = historyDoc.data();
-          existingPredictions = data.predictions || [];
-          existingPredictions.forEach(p => existingIds.add(p.marketId));
-      }
+    if (historyDoc.exists) {
+      const data = historyDoc.data();
+      existingPredictions = data.predictions || [];
+      existingPredictions.forEach(p => existingIds.add(p.marketId));
+    }
 
-      // Find new markets that are NOT in history
-      const newMarkets = markets.filter(m => !existingIds.has(m.id));
+    // Find new markets that are NOT in history
+    const newMarkets = markets.filter(m => !existingIds.has(m.id));
 
-      if (newMarkets.length > 0) {
-          console.log(`Found ${newMarkets.length} NEW markets in hourly update. Merging to history...`);
-          
-          const newPredictions = newMarkets.map(m => ({
-            id: `${today}-${m.id}`,
-            date: today,
-            marketId: m.id,
-            slug: m.slug || '',        // Store slug for Polymarket URL
-            title: m.title,
-            aiPrediction: m.prediction,
-            aiProb: m.aiProb,
-            marketProb: m.marketProb,
-            edge: m.edge,
-            kellyPercentage: m.kellyPercentage || 0,
-            reasoning: m.reasoning,
-            riskFactor: m.riskFactor,
-            confidence: m.confidence,
-            outcomes: m.outcomes,
-            outcome: 'pending',
-            source: 'hourly'
-          }));
+    if (newMarkets.length > 0) {
+      console.log(`Found ${newMarkets.length} NEW markets in hourly update. Merging to history...`);
 
-          const updatedPredictions = [...existingPredictions, ...newPredictions];
+      const newPredictions = newMarkets.map(m => ({
+        id: `${today}-${m.id}`,
+        date: today,
+        marketId: m.id,
+        slug: m.slug || '',        // Store slug for Polymarket URL
+        title: m.title,
+        aiPrediction: m.prediction,
+        aiProb: m.aiProb,
+        marketProb: m.marketProb,
+        edge: m.edge,
+        kellyPercentage: m.kellyPercentage || 0,
+        reasoning: m.reasoning,
+        riskFactor: m.riskFactor,
+        confidence: m.confidence,
+        outcomes: m.outcomes,
+        outcome: 'pending',
+        source: 'hourly'
+      }));
 
-          // Update stats
-          const stats = {
-              totalPredictions: updatedPredictions.length,
-              avgEdge: updatedPredictions.reduce((sum, p) => sum + Math.abs(p.edge), 0) / updatedPredictions.length,
-              avgKelly: updatedPredictions.reduce((sum, p) => sum + p.kellyPercentage, 0) / updatedPredictions.length,
-          };
+      const updatedPredictions = [...existingPredictions, ...newPredictions];
 
-          // Use set with merge: true or update if exists
-          await historyRef.set({
-              date: today,
-              predictions: updatedPredictions,
-              stats: stats,
-              updatedAt: new Date().toISOString() // Update timestamp
-          }, { merge: true });
-          
-          console.log(`Merged ${newMarkets.length} new markets into daily history.`);
-      }
+      // Update stats
+      const stats = {
+        totalPredictions: updatedPredictions.length,
+        avgEdge: updatedPredictions.reduce((sum, p) => sum + Math.abs(p.edge), 0) / updatedPredictions.length,
+        avgKelly: updatedPredictions.reduce((sum, p) => sum + p.kellyPercentage, 0) / updatedPredictions.length,
+      };
+
+      // Use set with merge: true or update if exists
+      await historyRef.set({
+        date: today,
+        predictions: updatedPredictions,
+        stats: stats,
+        updatedAt: new Date().toISOString() // Update timestamp
+      }, { merge: true });
+
+      console.log(`Merged ${newMarkets.length} new markets into daily history.`);
+    }
   } catch (error) {
-      console.error("Error merging hourly picks into history:", error);
-      // Don't fail the whole function if history merge fails
+    console.error("Error merging hourly picks into history:", error);
+    // Don't fail the whole function if history merge fails
   }
 }
 
@@ -715,7 +719,7 @@ export const dailyRefresh = onSchedule({
   memory: '1GiB'
 }, async (event) => {
   console.log('Starting daily market refresh...');
-  
+
   try {
     const apiKey = openrouterApiKey.value();
     if (!apiKey) {
@@ -723,7 +727,7 @@ export const dailyRefresh = onSchedule({
     }
 
     const markets = await fetchAndAnalyzeMarkets(apiKey);
-    
+
     if (markets.length > 0) {
       await saveToFirestore(markets);
       console.log('Daily refresh completed successfully!');
@@ -762,7 +766,7 @@ export const manualRefresh = onRequest({
 
   const refreshType = req.query.type || 'daily'; // 'daily' or 'hourly'
   console.log(`Starting manual ${refreshType} market refresh...`);
-  
+
   try {
     const apiKey = openrouterApiKey.value();
     if (!apiKey) {
@@ -770,35 +774,35 @@ export const manualRefresh = onRequest({
     }
 
     const markets = await fetchAndAnalyzeMarkets(apiKey);
-    
+
     if (markets.length > 0) {
       if (refreshType === 'hourly') {
         await saveToHourlyFirestore(markets);
         const hourKey = new Date().toISOString().slice(0, 13).replace('T', '-');
-        res.json({ 
-          success: true, 
+        res.json({
+          success: true,
           message: `Refreshed ${markets.length} markets (hourly)`,
           hour: hourKey
         });
       } else {
         await saveToFirestore(markets);
-        res.json({ 
-          success: true, 
+        res.json({
+          success: true,
           message: `Refreshed ${markets.length} markets (daily)`,
           date: new Date().toISOString().split('T')[0]
         });
       }
     } else {
-      res.json({ 
-        success: false, 
-        message: 'No markets analyzed' 
+      res.json({
+        success: false,
+        message: 'No markets analyzed'
       });
     }
   } catch (error) {
     console.error('Manual refresh failed:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -814,7 +818,7 @@ export const hourlyRefresh = onSchedule({
   memory: '1GiB'
 }, async (event) => {
   console.log('Starting hourly market refresh (premium)...');
-  
+
   try {
     // Skip the 06:00 UTC run (1AM ET) because daily refresh runs then.
     const currentUtcHour = new Date().getUTCHours();
@@ -829,7 +833,7 @@ export const hourlyRefresh = onSchedule({
     }
 
     const markets = await fetchAndAnalyzeMarkets(apiKey);
-    
+
     if (markets.length > 0) {
       await saveToHourlyFirestore(markets);
       console.log('Hourly refresh completed successfully!');
@@ -860,7 +864,7 @@ async function resolvePendingMarkets() {
 
     // Filter only pending items to avoid re-checking everything
     const pendingItems = predictions.filter(p => p.outcome === 'pending');
-    
+
     if (pendingItems.length === 0) continue;
 
     console.log(`Checking ${pendingItems.length} pending markets for date ${data.date}...`);
@@ -868,124 +872,124 @@ async function resolvePendingMarkets() {
     // Batch fetch resolved status from Polymarket (or one by one for simplicity first)
     // Polymarket API: /events?id=...
     for (const item of pendingItems) {
-        try {
-            // Polymarket Gamma API to get market details
-            // We need to find the market by ID. 
-            // Note: item.marketId is the Event ID in our current logic (from fetchAndAnalyzeMarkets)
-            // But we need to check specific Market status.
-            
-            // Ideally, we should query: https://gamma-api.polymarket.com/events?id={item.marketId}
-            const response = await fetch(`https://gamma-api.polymarket.com/events?id=${item.marketId}`);
-            if (!response.ok) continue;
-            
-            const eventData = await response.json();
-            // API returns array, take first if matches
-            const event = Array.isArray(eventData) ? eventData[0] : eventData;
-            
-            if (!event || !event.markets || !event.markets[0]) continue;
+      try {
+        // Polymarket Gamma API to get market details
+        // We need to find the market by ID. 
+        // Note: item.marketId is the Event ID in our current logic (from fetchAndAnalyzeMarkets)
+        // But we need to check specific Market status.
 
-            const market = event.markets[0]; // Assuming we tracked the main market
-            
-            // Check if resolved
-            // Polymarket markets have 'closed' boolean and 'ready' boolean.
-            // We look for resolved outcome.
-            // BUT: The API response format for resolved markets needs parsing.
-            // Often we look at 'question' or 'market' fields. 
-            // A simpler way for Gamma API: check if closed=true and volume is finalized.
-            
-            if (event.closed) {
-                // Market is closed. Who won?
-                // We need to parse outcomePrices or a specific "winner" field if available.
-                // Gamma API doesn't always make "winner" explicit in the event object easily.
-                // We often infer it from prices: the one at "1" (or close to 1) is the winner.
-                
-                const prices = JSON.parse(market.outcomePrices);
-                const outcomes = JSON.parse(market.outcomes);
-                
-                // Find index with price > 0.99 (Winner)
-                // Note: Prices are strings "0.05", "0.95"
-                const winnerIndex = prices.findIndex(p => parseFloat(p) > 0.99);
-                
-                if (winnerIndex !== -1) {
-                    const winningOutcome = outcomes[winnerIndex];
-                    
-                    // Normalize strings for comparison
-                    const cleanPrediction = item.aiPrediction?.trim().toLowerCase();
-                    const cleanWinner = winningOutcome?.trim().toLowerCase();
+        // Ideally, we should query: https://gamma-api.polymarket.com/events?id={item.marketId}
+        const response = await fetch(`https://gamma-api.polymarket.com/events?id=${item.marketId}`);
+        if (!response.ok) continue;
 
-                    // Update Item
-                    const isWin = cleanPrediction === cleanWinner;
-                    item.outcome = isWin ? 'win' : 'loss';
-                    item.resolvedAt = new Date().toISOString();
-                    item.resolvedOutcome = winningOutcome;
-                    
-                    // Calculate PnL if win
-                    // ROI = (1 / BetProb) - 1 for Win, -1 for Loss
-                    // BetProb = probability of the PREDICTED outcome at entry time
-                    // If prediction matches outcomes[0], betProb = marketProb
-                    // If prediction matches outcomes[1], betProb = 1 - marketProb
-                    
-                    let betProb = item.marketProb;
-                    // Check if prediction was for second outcome
-                    if (outcomes.length >= 2) {
-                        const cleanOutcomeA = outcomes[0]?.trim().toLowerCase();
-                        if (cleanPrediction !== cleanOutcomeA) {
-                            betProb = 1 - item.marketProb;
-                        }
-                    }
-                    
-                    if (item.outcome === 'win') {
-                        // Avoid division by zero
-                        const entryProb = Math.max(0.01, betProb); 
-                        item.roi = (1 / entryProb) - 1; 
-                    } else {
-                        item.roi = -1.0;
-                    }
-                    
-                    hasUpdates = true;
-                    resolvedCount++;
-                    console.log(`Resolved ${item.title}: ${item.outcome} (Winner: ${winningOutcome})`);
-                }
+        const eventData = await response.json();
+        // API returns array, take first if matches
+        const event = Array.isArray(eventData) ? eventData[0] : eventData;
+
+        if (!event || !event.markets || !event.markets[0]) continue;
+
+        const market = event.markets[0]; // Assuming we tracked the main market
+
+        // Check if resolved
+        // Polymarket markets have 'closed' boolean and 'ready' boolean.
+        // We look for resolved outcome.
+        // BUT: The API response format for resolved markets needs parsing.
+        // Often we look at 'question' or 'market' fields. 
+        // A simpler way for Gamma API: check if closed=true and volume is finalized.
+
+        if (event.closed) {
+          // Market is closed. Who won?
+          // We need to parse outcomePrices or a specific "winner" field if available.
+          // Gamma API doesn't always make "winner" explicit in the event object easily.
+          // We often infer it from prices: the one at "1" (or close to 1) is the winner.
+
+          const prices = JSON.parse(market.outcomePrices);
+          const outcomes = JSON.parse(market.outcomes);
+
+          // Find index with price > 0.99 (Winner)
+          // Note: Prices are strings "0.05", "0.95"
+          const winnerIndex = prices.findIndex(p => parseFloat(p) > 0.99);
+
+          if (winnerIndex !== -1) {
+            const winningOutcome = outcomes[winnerIndex];
+
+            // Normalize strings for comparison
+            const cleanPrediction = item.aiPrediction?.trim().toLowerCase();
+            const cleanWinner = winningOutcome?.trim().toLowerCase();
+
+            // Update Item
+            const isWin = cleanPrediction === cleanWinner;
+            item.outcome = isWin ? 'win' : 'loss';
+            item.resolvedAt = new Date().toISOString();
+            item.resolvedOutcome = winningOutcome;
+
+            // Calculate PnL if win
+            // ROI = (1 / BetProb) - 1 for Win, -1 for Loss
+            // BetProb = probability of the PREDICTED outcome at entry time
+            // If prediction matches outcomes[0], betProb = marketProb
+            // If prediction matches outcomes[1], betProb = 1 - marketProb
+
+            let betProb = item.marketProb;
+            // Check if prediction was for second outcome
+            if (outcomes.length >= 2) {
+              const cleanOutcomeA = outcomes[0]?.trim().toLowerCase();
+              if (cleanPrediction !== cleanOutcomeA) {
+                betProb = 1 - item.marketProb;
+              }
             }
-        } catch (err) {
-            console.error(`Error checking market ${item.marketId}:`, err.message);
+
+            if (item.outcome === 'win') {
+              // Avoid division by zero
+              const entryProb = Math.max(0.01, betProb);
+              item.roi = (1 / entryProb) - 1;
+            } else {
+              item.roi = -1.0;
+            }
+
+            hasUpdates = true;
+            resolvedCount++;
+            console.log(`Resolved ${item.title}: ${item.outcome} (Winner: ${winningOutcome})`);
+          }
         }
+      } catch (err) {
+        console.error(`Error checking market ${item.marketId}:`, err.message);
+      }
     }
 
     if (hasUpdates) {
-        // Recalculate Daily Stats
-        const resolvedPreds = predictions.filter(p => p.outcome !== 'pending');
-        const wins = resolvedPreds.filter(p => p.outcome === 'win').length;
-        const total = resolvedPreds.length;
-        const accuracy = total > 0 ? (wins / total) : 0;
-        
-        const totalRoi = resolvedPreds.reduce((sum, p) => sum + (p.roi || 0), 0);
-        const avgRoi = total > 0 ? (totalRoi / total) : 0;
+      // Recalculate Daily Stats
+      const resolvedPreds = predictions.filter(p => p.outcome !== 'pending');
+      const wins = resolvedPreds.filter(p => p.outcome === 'win').length;
+      const total = resolvedPreds.length;
+      const accuracy = total > 0 ? (wins / total) : 0;
 
-        // Brier Score = (Prob - Outcome)^2
-        // Win=1, Loss=0.
-        // If Win: (AI_Prob - 1)^2
-        // If Loss: (AI_Prob - 0)^2
-        const brierSum = resolvedPreds.reduce((sum, p) => {
-            const outcomeVal = p.outcome === 'win' ? 1 : 0;
-            return sum + Math.pow(p.aiProb - outcomeVal, 2);
-        }, 0);
-        const brierScore = total > 0 ? (brierSum / total) : 0;
+      const totalRoi = resolvedPreds.reduce((sum, p) => sum + (p.roi || 0), 0);
+      const avgRoi = total > 0 ? (totalRoi / total) : 0;
 
-        await db.collection('prediction_history').doc(data.date).update({
-            predictions: predictions,
-            stats: {
-                ...data.stats,
-                resolvedCount: total,
-                accuracy: accuracy,
-                avgRoi: avgRoi,
-                brierScore: brierScore,
-                updatedAt: new Date().toISOString()
-            }
-        });
+      // Brier Score = (Prob - Outcome)^2
+      // Win=1, Loss=0.
+      // If Win: (AI_Prob - 1)^2
+      // If Loss: (AI_Prob - 0)^2
+      const brierSum = resolvedPreds.reduce((sum, p) => {
+        const outcomeVal = p.outcome === 'win' ? 1 : 0;
+        return sum + Math.pow(p.aiProb - outcomeVal, 2);
+      }, 0);
+      const brierScore = total > 0 ? (brierSum / total) : 0;
+
+      await db.collection('prediction_history').doc(data.date).update({
+        predictions: predictions,
+        stats: {
+          ...data.stats,
+          resolvedCount: total,
+          accuracy: accuracy,
+          avgRoi: avgRoi,
+          brierScore: brierScore,
+          updatedAt: new Date().toISOString()
+        }
+      });
     }
   }
-  
+
   return resolvedCount;
 }
 
@@ -998,23 +1002,23 @@ export const checkResolutions = onSchedule({
   timeoutSeconds: 540,
   memory: '512MiB'
 }, async (event) => {
-    console.log("Starting resolution check...");
-    const count = await resolvePendingMarkets();
-    console.log(`Resolution check complete. Resolved ${count} markets.`);
+  console.log("Starting resolution check...");
+  const count = await resolvePendingMarkets();
+  console.log(`Resolution check complete. Resolved ${count} markets.`);
 });
 
 /**
  * HTTP Trigger for manual resolution check
  */
 export const manualResolution = onRequest({
-    cors: ALLOWED_ORIGINS,
-    invoker: 'public'
+  cors: ALLOWED_ORIGINS,
+  invoker: 'public'
 }, async (req, res) => {
-    try {
-        const count = await resolvePendingMarkets();
-        res.json({ success: true, resolved: count });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, error: error.message });
-    }
+  try {
+    const count = await resolvePendingMarkets();
+    res.json({ success: true, resolved: count });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });

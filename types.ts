@@ -42,7 +42,10 @@ export interface ResolvedMarket {
 }
 
 export interface ResolvedPrediction extends MarketAnalysis {
-  resolvedOutcome: 'Yes' | 'No';
+  date: string;
+  aiPrediction: string;
+  marketId: string;
+  resolvedOutcome: string;
   wasCorrect: boolean;
   brierError: number;
   kellyReturn: number;
