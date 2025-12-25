@@ -8,6 +8,7 @@ import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
 import { PremiumAccessModal } from './components/PremiumAccessModal';
+import { getPolymarketUrl } from './services/linkService';
 import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark, Droplets, Timer, GitBranch } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -372,8 +373,8 @@ const App: React.FC = () => {
               <button
                 onClick={handlePremiumClick}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all border ${isPremium
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 border-transparent'
-                    : 'bg-slate-800/50 text-amber-400 hover:text-white hover:bg-slate-800 border-amber-500/30'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/25 border-transparent'
+                  : 'bg-slate-800/50 text-amber-400 hover:text-white hover:bg-slate-800 border-amber-500/30'
                   }`}
                 title={isPremium ? "Premium Active" : "Activate Premium - Free for a limited time"}
               >
@@ -459,8 +460,8 @@ const App: React.FC = () => {
                 <button
                   onClick={() => setDataSource('daily')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${dataSource === 'daily'
-                      ? 'bg-slate-700 text-white'
-                      : 'text-slate-400 hover:text-white'
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   Daily (6AM UTC)
@@ -469,10 +470,10 @@ const App: React.FC = () => {
                   onClick={() => setDataSource('hourly')}
                   disabled={hourlyMarkets.length === 0}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${dataSource === 'hourly'
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-                      : hourlyMarkets.length === 0
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-400 hover:text-white'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                    : hourlyMarkets.length === 0
+                      ? 'text-slate-600 cursor-not-allowed'
+                      : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   <Clock size={14} />
@@ -519,8 +520,8 @@ const App: React.FC = () => {
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${selectedCategory === cat
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
                       }`}
                   >
                     {cat}
@@ -583,8 +584,8 @@ const App: React.FC = () => {
               <button
                 onClick={() => setShowFavorites(!showFavorites)}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide transition-all border ${showFavorites
-                    ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
                   }`}
               >
                 <Bookmark size={14} className={showFavorites ? 'fill-amber-400' : ''} />
@@ -595,8 +596,8 @@ const App: React.FC = () => {
               <button
                 onClick={() => setShowContrarian(!showContrarian)}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide transition-all border ${showContrarian
-                    ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
-                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
                   }`}
               >
                 <Swords size={16} />
@@ -830,7 +831,7 @@ const App: React.FC = () => {
                 <li><button onClick={() => setShowHowItWorks(true)} className="hover:text-blue-400 transition-colors">How AI Analysis Works</button></li>
                 <li><button onClick={() => setShowHistory(true)} className="hover:text-blue-400 transition-colors">Prediction History</button></li>
                 <li><button onClick={() => setShowPremiumModal(true)} className="hover:text-amber-400 transition-colors">Premium Access</button></li>
-                <li><a href={`https://${(import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com'}?via=steve-rioux`} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Visit Polymarket</a></li>
+                <li><a href={getPolymarketUrl('')} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Visit Polymarket</a></li>
               </ul>
             </div>
           </div>

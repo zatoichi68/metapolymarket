@@ -1,6 +1,7 @@
 import React from 'react';
 import { MarketAnalysis } from '../types';
 import { X, Flame, TrendingUp, Target, ExternalLink, Bell } from 'lucide-react';
+import { getPolymarketUrl } from '../services/linkService';
 
 interface EdgeAlertsProps {
   isOpen: boolean;
@@ -76,8 +77,8 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                   <div
                     key={market.id}
                     className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${isHot
-                        ? 'bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/50'
-                        : 'bg-slate-800/50 border-slate-700'
+                      ? 'bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/50'
+                      : 'bg-slate-800/50 border-slate-700'
                       }`}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -118,12 +119,11 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
 
                       <button
                         onClick={() => {
-                          const baseUrl = (import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com';
-                          onBet(`https://${baseUrl}/event/${market.slug}?via=steve-rioux`);
+                          onBet(getPolymarketUrl(market.slug));
                         }}
                         className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5 transition-all ${isHot
-                            ? 'bg-orange-500 hover:bg-orange-400 text-white'
-                            : 'bg-emerald-500 hover:bg-emerald-400 text-white'
+                          ? 'bg-orange-500 hover:bg-orange-400 text-white'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-white'
                           }`}
                       >
                         BET <ExternalLink size={14} />

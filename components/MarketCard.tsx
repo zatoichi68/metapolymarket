@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MarketAnalysis } from '../types';
 import { ArrowUpRight, Bookmark, Sparkles, ExternalLink, BrainCircuit, Rocket } from 'lucide-react';
+import { getPolymarketUrl } from '../services/linkService';
 
 interface MarketCardProps {
   market: MarketAnalysis;
@@ -158,8 +159,7 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
           <button
             onClick={(e) => {
               e.preventDefault();
-              const baseUrl = (import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com';
-              onBet(`https://${baseUrl}/event/${market.slug}?via=steve-rioux`);
+              onBet(getPolymarketUrl(market.slug));
             }}
             className={`h-9 px-5 rounded-md text-xs font-bold uppercase tracking-wide border transition-all active:scale-95 flex items-center justify-center ${buttonClass}`}
           >
@@ -193,7 +193,7 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
 
           {/* Title - Linked */}
           <a
-            href={`https://${(import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com'}/event/${market.slug}?via=steve-rioux`}
+            href={getPolymarketUrl(market.slug)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex-1 group/title"
@@ -225,8 +225,8 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
           <Bookmark
             size={18}
             className={`transition-all ${isFavorite
-                ? 'fill-amber-400 text-amber-400'
-                : 'text-slate-500 hover:text-amber-400 group-hover/fav:scale-110'
+              ? 'fill-amber-400 text-amber-400'
+              : 'text-slate-500 hover:text-amber-400 group-hover/fav:scale-110'
               }`}
           />
         </button>

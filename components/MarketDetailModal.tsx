@@ -1,6 +1,7 @@
 import React from 'react';
 import { MarketAnalysis } from '../types';
 import { X, BrainCircuit, Users, TrendingUp, ExternalLink, AlertCircle, Target } from 'lucide-react';
+import { getPolymarketUrl } from '../services/linkService';
 
 interface MarketDetailModalProps {
   market: MarketAnalysis | null;
@@ -185,8 +186,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
           <button
             onClick={() => {
               onClose();
-              const baseUrl = (import.meta as any).env?.VITE_REFERRAL_DOMAIN || 'polymarket.com';
-              onBet(`https://${baseUrl}/event/${market.slug || market.id}?via=steve-rioux`);
+              onBet(getPolymarketUrl(market.slug || market.id));
             }}
             className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-purple-900/20"
           >
