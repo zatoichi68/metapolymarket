@@ -16,6 +16,8 @@ const smtpPass = defineSecret('SMTP_PASS');
 const smtpFrom = defineSecret('SMTP_FROM');
 const smtpFromName = defineSecret('SMTP_FROM_NAME');
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
+const OPENROUTER_CHEAP_MODEL = process.env.OPENROUTER_CHEAP_MODEL || 'google/gemini-2.5-flash-lite';
+const OPENROUTER_REVIEW_MODEL = process.env.OPENROUTER_REVIEW_MODEL || OPENROUTER_MODEL;
 
 // CORS Configuration - Restrict to allowed origins
 const ALLOWED_ORIGINS = [
@@ -317,13 +319,13 @@ export const checkPremiumStatus = onRequest({
 /**
  * Analyze a market using OpenRouter Grok
  */
-async function analyzeMarket(title, outcomes, marketProb, volume, apiKey) {
+async function analyzeMarket(title, outcomes, marketProb, volume, apiKey, model = OPENROUTER_MODEL) {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const outcomeA = outcomes[0];
   const outcomeB = outcomes[1] || "Other";
   const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
 
-  const prompt = `Model: ${OPENROUTER_MODEL}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED but ACTIONABLE probabilities. Anchor to market, then identify whether there is a tradable mispricing.
+  const prompt = `Model: ${model}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED but ACTIONABLE probabilities. Anchor to market, then identify whether there is a tradable mispricing.
 
 Context
 - Date: ${today}
@@ -357,7 +359,7 @@ Return ONLY raw JSON:
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model,
       messages: [{ role: 'user', content: prompt }],
     })
   });
@@ -416,6 +418,44 @@ const computeKellyPercentage = ({ aiProbabilityForOutcomeA, prediction, outcomes
   f = Math.max(0, Math.min(0.05, f * 0.35));
 
   return Math.round(f * 10000) / 100;
+};
+
+const finalizeAnalysis = ({ analysis, prob, outcomes }) => {
+  let aiProb = analysis.aiProbability ?? prob;
+  const prediction = analysis.prediction ?? outcomes[0];
+  const confidence = analysis.confidence ?? 5;
+
+  // Calibration by shrinkage: keep market anchoring without erasing tradable edges.
+  aiProb = (aiProb * 0.45) + (prob * 0.55);
+  aiProb = Math.max(0.01, Math.min(0.99, aiProb));
+
+  const calculatedEdge = prediction === outcomes[0]
+    ? aiProb - prob
+    : (1 - aiProb) - (1 - prob);
+
+  return {
+    aiProb,
+    prediction,
+    confidence,
+    calculatedEdge,
+    kellyPercentage: computeKellyPercentage({
+      aiProbabilityForOutcomeA: aiProb,
+      prediction,
+      outcomes,
+      marketProbOutcomeA: prob,
+      confidence
+    })
+  };
+};
+
+const shouldReviewWithGrok = ({ title, category, prob, finalized }) => {
+  const sensitive = /(iran|trump|china|taiwan|election|president|minister|regime|war|invade|nuclear|sanction|hormuz|fed|rate|oil|geopolitic)/i
+    .test(`${title} ${category || ''}`);
+  const tailMarket = prob <= 0.08 || prob >= 0.92;
+  const positiveEdge = finalized.calculatedEdge >= 0.03;
+  const weakConfidence = Number(finalized.confidence) < 5;
+
+  return positiveEdge || weakConfidence || tailMarket || sensitive || category === 'Politics';
 };
 
 /**
@@ -501,34 +541,51 @@ async function fetchAndAnalyzeMarkets(apiKey) {
   const analyzedMarkets = [];
   let successCount = 0;
   let errorCount = 0;
+  let cheapCount = 0;
+  let reviewCount = 0;
+  let reviewFallbackCount = 0;
 
   for (const { event, market, prob, outcomes } of limitedMarkets) {
     try {
-      const analysis = await runAnalysisWithRetry([
+      let analysis = await runAnalysisWithRetry([
         event.title,
         outcomes,
         prob,
         parseFloat(market.volume || "0"),
-        apiKey
+        apiKey,
+        OPENROUTER_CHEAP_MODEL
       ]);
+      cheapCount++;
 
-      let aiProb = analysis.aiProbability ?? prob;
-      const prediction = analysis.prediction ?? outcomes[0];
-      const confidence = analysis.confidence ?? 5;
+      let analysisModel = OPENROUTER_CHEAP_MODEL;
+      let finalized = finalizeAnalysis({ analysis, prob, outcomes });
 
-      // Calibration by shrinkage: keep market anchoring without erasing tradable edges.
-      aiProb = (aiProb * 0.45) + (prob * 0.55);
-      aiProb = Math.max(0.01, Math.min(0.99, aiProb));
-
-      // Calculate edge correctly based on which outcome is predicted
-      // aiProb is ALWAYS for outcomes[0] (first outcome)
-      // If predicting outcomes[0]: edge = aiProb - prob
-      // If predicting outcomes[1]: edge = (1 - aiProb) - (1 - prob) = prob - aiProb
-      let calculatedEdge = 0;
-      if (prediction === outcomes[0]) {
-        calculatedEdge = aiProb - prob;
-      } else {
-        calculatedEdge = (1 - aiProb) - (1 - prob);
+      if (
+        OPENROUTER_REVIEW_MODEL !== OPENROUTER_CHEAP_MODEL &&
+        shouldReviewWithGrok({
+          title: event.title,
+          category: analysis.category,
+          prob,
+          finalized
+        })
+      ) {
+        try {
+          const review = await runAnalysisWithRetry([
+            event.title,
+            outcomes,
+            prob,
+            parseFloat(market.volume || "0"),
+            apiKey,
+            OPENROUTER_REVIEW_MODEL
+          ]);
+          analysis = review;
+          analysisModel = OPENROUTER_REVIEW_MODEL;
+          finalized = finalizeAnalysis({ analysis, prob, outcomes });
+          reviewCount++;
+        } catch (reviewError) {
+          reviewFallbackCount++;
+          console.warn(`Grok review failed for ${event.title}, keeping cheap analysis:`, reviewError.message);
+        }
       }
 
       analyzedMarkets.push({
@@ -538,22 +595,17 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         category: analysis.category ?? "Other",
         imageUrl: event.image,
         marketProb: prob,
-        aiProb,
-        edge: calculatedEdge,
+        aiProb: finalized.aiProb,
+        edge: finalized.calculatedEdge,
         reasoning: analysis.reasoning ?? "Analysis based on market trends.",
         volume: parseFloat(market.volume || "0"),
         outcomes,
-        prediction,
-        confidence,
-        kellyPercentage: computeKellyPercentage({
-          aiProbabilityForOutcomeA: aiProb,
-          prediction,
-          outcomes,
-          marketProbOutcomeA: prob,
-          confidence
-        }),
+        prediction: finalized.prediction,
+        confidence: finalized.confidence,
+        kellyPercentage: finalized.kellyPercentage,
         riskFactor: analysis.riskFactor ?? "Market volatility",
         analysisStatus: "fresh",
+        analysisModel,
         lastAnalyzedAt: new Date().toISOString(),
         endDate: event.endDate
       });
@@ -588,7 +640,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
     await sleep(PER_CALL_DELAY_MS);
   }
 
-  console.log(`Analysis complete: ${successCount} success, ${errorCount} errors`);
+  console.log(`Analysis complete: ${successCount} success, ${errorCount} errors, ${cheapCount} cheap passes, ${reviewCount} Grok reviews, ${reviewFallbackCount} review fallbacks`);
   return analyzedMarkets;
 }
 
