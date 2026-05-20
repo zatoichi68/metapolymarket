@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MarketAnalysis } from '../types';
 import { ArrowUpRight, Bookmark, Sparkles, ExternalLink, BrainCircuit, Rocket } from 'lucide-react';
 import { getPolymarketUrl } from '../services/linkService';
+import { getMarketSignal } from '../services/marketSignals';
 
 interface MarketCardProps {
   market: MarketAnalysis;
@@ -53,6 +54,8 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
   const outcomeA = market.outcomes[0] || "Yes";
   const outcomeB = market.outcomes[1] || "No";
 
+  const signal = getMarketSignal(market);
+
   // Probabilities for Outcome A
   const marketProbA = market.marketProb;
 
@@ -62,29 +65,15 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
     ? market.wasCorrect
     : (resolvedOutcome ? resolvedOutcome === market.prediction : undefined);
 
-  // Calculate Edge for the PREDICTED outcome
   const isPredictedA = market.prediction === outcomeA;
 
-  // Get market probability for the predicted outcome
-  const marketProbForPrediction = isPredictedA ? market.marketProb : (1 - market.marketProb);
-
-  // Validate backend edge: AI prob = marketProb + edge must be between 0 and 1
-  let calculatedEdge = market.edge || 0;
-  const impliedAiProb = marketProbForPrediction + calculatedEdge;
-
-  if (impliedAiProb < 0 || impliedAiProb > 1) {
-    // Backend edge is invalid - recalculate from aiProb
-    const aiProbForPrediction = isPredictedA ? market.aiProb : (1 - market.aiProb);
-    calculatedEdge = aiProbForPrediction - marketProbForPrediction;
-  }
-
   // For displaying edge on Outcome A row (only relevant if A is predicted)
-  const edgeA = calculatedEdge;
+  const edgeA = isPredictedA ? signal.edge : -signal.edge;
 
   // Probabilities for Outcome B (Inverse)
   const marketProbB = 1 - marketProbA;
   // For displaying edge on Outcome B row (only relevant if B is predicted)
-  const edgeB = calculatedEdge;
+  const edgeB = isPredictedA ? -signal.edge : signal.edge;
 
   const renderRow = (name: string, marketProb: number, edge: number, isPredicted: boolean) => {
     const percentage = Math.round(marketProb * 100);
@@ -96,8 +85,18 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
     const nameColor = isPredicted ? 'text-white' : 'text-slate-200'; // Made non-predicted lighter (slate-200) for better name visibility
     const percentColor = isPredicted ? 'text-white' : 'text-slate-400';
 
+    const signalClass = signal.level === 'strong'
+      ? 'bg-orange-500/20 text-orange-300'
+      : signal.level === 'standard'
+        ? 'bg-emerald-500/20 text-emerald-300'
+        : signal.level === 'small'
+          ? 'bg-sky-500/20 text-sky-300'
+          : 'bg-slate-700/70 text-slate-300';
+
     const buttonClass = isPredicted
-      ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)] border-emerald-400'
+      ? signal.isActionable
+        ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)] border-emerald-400'
+        : 'bg-slate-700/70 hover:bg-slate-600 text-slate-200 border-slate-600'
       : 'bg-slate-700/50 text-slate-500 border-transparent cursor-not-allowed hover:bg-slate-700/70';
 
     return (
@@ -113,12 +112,15 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market, onAnalyze, onBet
               <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
                 <Sparkles size={8} /> Swarm Pick
               </span>
-              {market.kellyPercentage > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${signalClass}`}>
+                {signal.label}
+              </span>
+              {signal.suggestedStake > 0 && (
                 <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
-                  Kelly {market.kellyPercentage.toFixed(1)}%
+                  Stake {signal.suggestedStake.toFixed(1)}%
                 </span>
               )}
-              {market.probChange !== undefined && market.probChange > 0.02 && calculatedEdge > 0.05 && (
+              {market.probChange !== undefined && market.probChange > 0.02 && signal.edge > 0.05 && (
                 <span
                   className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold flex items-center gap-1 animate-pulse"
                   title={`Trending: Price up ${(market.probChange * 100).toFixed(1)}% today with positive AI edge`}

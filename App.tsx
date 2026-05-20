@@ -9,6 +9,7 @@ import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
 import { PremiumAccessModal } from './components/PremiumAccessModal';
 import { getPolymarketUrl } from './services/linkService';
+import { getMarketSignal } from './services/marketSignals';
 import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark, Droplets, Timer, GitBranch } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -33,13 +34,13 @@ const App: React.FC = () => {
     }
   });
   const [timeFilter, setTimeFilter] = useState<string>('all'); // 'all', '1d', '1w', '1m'
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'active', 'resolved'
+  const [statusFilter, setStatusFilter] = useState<string>('active'); // 'all', 'active', 'resolved'
   const [selectedMarket, setSelectedMarket] = useState<MarketAnalysis | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
   const [showPremiumModal, setShowPremiumModal] = useState<boolean>(false);
   const [pendingBetUrl, setPendingBetUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('edge'); // Default sort by Edge
+  const [sortBy, setSortBy] = useState<string>('actionable');
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [showAlerts, setShowAlerts] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(() => {
@@ -189,6 +190,7 @@ const App: React.FC = () => {
   const fallbackToDaily = isPremium && dataSource === 'hourly' && hourlyMarkets.length === 0 && markets.length > 0;
 
   const fallbackCount = activeMarkets.filter(m => m.analysisStatus === 'fallback').length;
+  const actionableCount = activeMarkets.filter(m => getMarketSignal(m).isActionable).length;
 
   // Format timestamp to local DD/MM/YYYY HH:MM:SS
   const formatTimestamp = (ts: string | null) => {
@@ -229,9 +231,10 @@ const App: React.FC = () => {
       ? true
       : (m.category.toLowerCase().includes(selectedCategory.toLowerCase()) || (selectedCategory === 'Other' && !['Politics', 'Crypto', 'Sports', 'Business'].includes(m.category)));
 
-    // Contrarian Filter (AI disagrees with Crowd)
-    const isContrarian = (m.marketProb >= 0.5 && m.aiProb < 0.5) || (m.marketProb < 0.5 && m.aiProb >= 0.5);
-    const matchesContrarian = showContrarian ? isContrarian : true;
+    const signal = getMarketSignal(m);
+
+    // Market Mispricing Filter (positive actionable signal, not only opposite-side disagreement)
+    const matchesContrarian = showContrarian ? signal.isActionable : true;
 
     // Favorites Filter
     const matchesFavorites = showFavorites ? favorites.includes(m.id) : true;
@@ -290,9 +293,10 @@ const App: React.FC = () => {
         const aCompetitive = Math.abs(a.marketProb - 0.5);
         const bCompetitive = Math.abs(b.marketProb - 0.5);
         return aCompetitive - bCompetitive;
+      case 'actionable':
+        return getMarketSignal(b).sortScore - getMarketSignal(a).sortScore;
       case 'edge':
-        // Sort by edge value (highest positive edge first)
-        return b.edge - a.edge;
+        return getMarketSignal(b).edge - getMarketSignal(a).edge;
       default:
         return b.volume - a.volume;
     }
@@ -335,6 +339,7 @@ const App: React.FC = () => {
   ];
 
   const sortOptions = [
+    { id: 'actionable', label: 'Actionable', icon: Target },
     { id: 'edge', label: 'Highest Edge', icon: Zap },
     { id: 'volume24h', label: '24hr Volume', icon: TrendingUp },
     { id: 'volume', label: 'Total Volume', icon: DollarSign },
@@ -466,6 +471,7 @@ const App: React.FC = () => {
                   Last update: {formatTimestamp(activeTimestamp)}
                   {fallbackToDaily && ' · Hourly unavailable, showing daily picks'}
                   {fallbackCount > 0 && ` · ${fallbackCount} model fallback${fallbackCount === 1 ? '' : 's'}`}
+                  {actionableCount > 0 && ` · ${actionableCount} actionable`}
                 </p>
                 {(error || dataNotice) && (
                   <p className="text-xs text-amber-300 mt-1">{error || dataNotice}</p>
@@ -618,7 +624,7 @@ const App: React.FC = () => {
                   }`}
               >
                 <Swords size={16} />
-                Market Mispricing
+                Actionable
               </button>
 
               <div className="text-slate-500 text-sm font-mono flex items-center gap-2">
@@ -676,7 +682,7 @@ const App: React.FC = () => {
                   <p className="text-sm text-slate-600 mt-2">The backend cache is warming up. Try again shortly.</p>
                 )}
                 {showContrarian && (
-                  <p className="text-sm text-slate-600 mt-2">The Swarm AI currently agrees with the crowd on all selected markets.</p>
+                  <p className="text-sm text-slate-600 mt-2">No positive edge clears the actionability threshold for this filter set.</p>
                 )}
               </div>
             )}

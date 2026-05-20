@@ -2,6 +2,7 @@ import React from 'react';
 import { MarketAnalysis } from '../types';
 import { X, BrainCircuit, Users, TrendingUp, ExternalLink, AlertCircle, Target } from 'lucide-react';
 import { getPolymarketUrl } from '../services/linkService';
+import { getMarketSignal } from '../services/marketSignals';
 
 interface MarketDetailModalProps {
   market: MarketAnalysis | null;
@@ -13,30 +14,16 @@ interface MarketDetailModalProps {
 export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, isOpen, onClose, onBet }) => {
   if (!isOpen || !market) return null;
 
-  // Determine if AI predicted the first outcome
-  const isPredictedOutcomeA = market.prediction === market.outcomes[0];
-
-  // Calculate market probability for the predicted outcome
-  const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
-
-  // Validate backend edge: AI prob = marketProb + edge must be between 0 and 1
-  let displayEdge = market.edge || 0;
-  const impliedAiProb = displayMarketProb + displayEdge;
-
-  if (impliedAiProb < 0 || impliedAiProb > 1) {
-    // Backend edge is invalid - recalculate from aiProb
-    const aiProbForPrediction = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
-    displayEdge = aiProbForPrediction - displayMarketProb;
-  }
-
-  // Calculate AI probability
-  const displayAiProb = Math.min(1, Math.max(0, displayMarketProb + displayEdge));
+  const signal = getMarketSignal(market);
+  const displayMarketProb = signal.displayMarketProb;
+  const displayAiProb = signal.displayAiProb;
+  const displayEdge = signal.edge;
 
   const marketPercent = Math.round(displayMarketProb * 100);
   const aiPercent = Math.round(displayAiProb * 100);
 
   // High-edge contrarian opportunity: AI sees significantly more value than the crowd
-  const isHighEdgeOpportunity = displayEdge > 0.05; // Edge > 5%
+  const isHighEdgeOpportunity = signal.isActionable;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -135,7 +122,7 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
             {isHighEdgeOpportunity && (
               <div className="mt-3 text-xs text-emerald-500/80 flex items-center gap-1.5 bg-emerald-500/5 p-2 rounded border border-emerald-500/10">
                 <TrendingUp size={12} />
-                High-Edge Opportunity detected (+{(displayEdge * 100).toFixed(1)}% alpha).
+                Actionable signal detected (+{(displayEdge * 100).toFixed(1)}% alpha).
               </div>
             )}
             {displayEdge < -0.05 && (
@@ -147,21 +134,21 @@ export const MarketDetailModal: React.FC<MarketDetailModalProps> = ({ market, is
           </div>
 
           {/* Kelly Criterion - only show if edge is positive */}
-          {market.kellyPercentage > 0 && displayEdge > 0 && (
+          {signal.suggestedStake > 0 && displayEdge > 0 && (
             <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 border border-amber-500/30">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400">
                   <Target size={24} />
                 </div>
                 <div>
-                  <div className="text-sm text-amber-300/80">Kelly Criterion - Optimal Bet Size</div>
+                  <div className="text-sm text-amber-300/80">Model Stake Range</div>
                   <div className="text-2xl font-bold text-amber-400">
-                    {market.kellyPercentage.toFixed(1)}% <span className="text-base font-normal text-amber-300/60">of bankroll</span>
+                    {signal.suggestedStake.toFixed(1)}% <span className="text-base font-normal text-amber-300/60">of bankroll</span>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-amber-300/60 mt-3">
-                Based on the edge detected, this is the mathematically optimal percentage of your capital to allocate to this bet for maximum long-term growth.
+                Fractional sizing adjusted for edge, confidence, liquidity, and extreme-price risk.
               </p>
             </div>
           )}

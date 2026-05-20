@@ -2,6 +2,7 @@ import React from 'react';
 import { MarketAnalysis } from '../types';
 import { X, Flame, TrendingUp, Target, ExternalLink, Bell } from 'lucide-react';
 import { getPolymarketUrl } from '../services/linkService';
+import { getMarketSignal } from '../services/marketSignals';
 
 interface EdgeAlertsProps {
   isOpen: boolean;
@@ -11,12 +12,10 @@ interface EdgeAlertsProps {
   onBet: (url: string) => void;
 }
 
-const EDGE_THRESHOLD = 0.08; // 8% edge threshold for "high edge" alerts
-
 export const getHighEdgeMarkets = (markets: MarketAnalysis[]): MarketAnalysis[] => {
   return markets
-    .filter(m => Math.abs(m.edge) >= EDGE_THRESHOLD)
-    .sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+    .filter(m => getMarketSignal(m).isActionable)
+    .sort((a, b) => getMarketSignal(b).sortScore - getMarketSignal(a).sortScore);
 };
 
 export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets, onMarketClick, onBet }) => {
@@ -34,10 +33,10 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
               <Flame className="text-orange-400" />
-              High Edge Alerts
+              Actionable Picks
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              Markets with &gt;{Math.round(EDGE_THRESHOLD * 100)}% edge detected
+              Positive edge, enough confidence, and active markets only
             </p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white">
@@ -50,28 +49,15 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
           {highEdgeMarkets.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <Bell size={48} className="mx-auto mb-4 opacity-50" />
-              <p className="text-lg">No high-edge opportunities right now</p>
-              <p className="text-sm mt-2">Check back later or lower your threshold</p>
+              <p className="text-lg">No actionable picks right now</p>
+              <p className="text-sm mt-2">The model is currently in watch mode.</p>
             </div>
           ) : (
             <div className="space-y-4">
               {highEdgeMarkets.map((market) => {
-                // Normalize probabilities to the predicted outcome (align with MarketDetailModal)
-                const isPredictedOutcomeA = market.prediction === market.outcomes[0];
-                const displayMarketProb = isPredictedOutcomeA ? market.marketProb : (1 - market.marketProb);
-
-                let displayEdge = market.edge || 0;
-                const impliedAiProb = displayMarketProb + displayEdge;
-
-                if (impliedAiProb < 0 || impliedAiProb > 1) {
-                  const aiProbForPrediction = isPredictedOutcomeA ? market.aiProb : (1 - market.aiProb);
-                  displayEdge = aiProbForPrediction - displayMarketProb;
-                }
-
-                const displayAiProb = Math.min(1, Math.max(0, displayMarketProb + displayEdge));
-
-                const edgePercent = Math.abs(displayEdge) * 100;
-                const isHot = edgePercent >= 15;
+                const signal = getMarketSignal(market);
+                const edgePercent = signal.edgePercent;
+                const isHot = signal.level === 'strong';
 
                 return (
                   <div
@@ -89,9 +75,9 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                             }`}>
                             +{edgePercent.toFixed(1)}% Edge
                           </span>
-                          {market.kellyPercentage > 0 && (
+                          {signal.suggestedStake > 0 && (
                             <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">
-                              Kelly {market.kellyPercentage.toFixed(1)}%
+                              Stake {signal.suggestedStake.toFixed(1)}%
                             </span>
                           )}
                         </div>
@@ -110,9 +96,9 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
                           </div>
                           <div className="flex items-center gap-1.5 text-slate-400">
                             <TrendingUp size={14} />
-                            <span className="text-purple-400 font-mono">{Math.round(displayAiProb * 100)}%</span>
+                            <span className="text-purple-400 font-mono">{Math.round(signal.displayAiProb * 100)}%</span>
                             vs
-                            <span className="text-blue-400 font-mono">{Math.round(displayMarketProb * 100)}%</span>
+                            <span className="text-blue-400 font-mono">{Math.round(signal.displayMarketProb * 100)}%</span>
                           </div>
                         </div>
                       </div>
@@ -149,8 +135,6 @@ export const EdgeAlerts: React.FC<EdgeAlertsProps> = ({ isOpen, onClose, markets
     </div>
   );
 };
-
-
 
 
 

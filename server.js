@@ -119,15 +119,11 @@ const computeKellyPercentage = ({
   const predictedProb = pred === outcomeA ? aiA : 1 - aiA;
   const marketSideProb = pred === outcomeA ? mpA : 1 - mpA;
 
-  // Garde-fous de sizing (empiriques, basés sur l'échantillon Firestore):
-  // - pas de bet sur prix extrêmes (p≈0 ou p≈1): faible payout + micro-edge => énorme Kelly instable
-  // - pas de bet si edge < 2 points (bruit > signal pour ce modèle)
-  // - si confiance faible, pas de bet
   const conf = Number(confidence);
   if (Number.isFinite(conf) && conf < 4) return 0;
-  if (marketSideProb <= 0.05 || marketSideProb >= 0.95) return 0;
-  const edgeAbs = Math.abs(predictedProb - marketSideProb);
-  if (edgeAbs < 0.02) return 0;
+  if (marketSideProb <= 0.03 || marketSideProb >= 0.97) return 0;
+  const edgeAbs = predictedProb - marketSideProb;
+  if (edgeAbs < 0.015) return 0;
 
   // Kelly binaire: f* = (bp - q)/b avec b = (1/price)-1
   const b = (1 / marketSideProb) - 1;
@@ -137,12 +133,9 @@ const computeKellyPercentage = ({
   let f = (b * p - q) / b;
   if (!Number.isFinite(f)) f = 0;
 
-  // AJUSTEMENT: Fractional Kelly (0.3x) pour réduire la volatilité et protéger contre l'incertitude du modèle
-  // Full Kelly est trop agressif quand "p" est une estimation IA imparfaite.
-  f = f * 0.3;
+  f = f * 0.35;
 
-  // Option A sans levier: clamp [0, 1] => [0%, 100%]
-  f = Math.max(0, Math.min(1, f));
+  f = Math.max(0, Math.min(0.05, f));
   return Math.round(f * 10000) / 100; // 2 décimales
 };
 
@@ -174,12 +167,20 @@ const firestoreDocToJson = (doc) => {
   return obj;
 };
 
+const isActiveMarket = (market) => {
+  if (!market?.endDate) return true;
+  const end = new Date(market.endDate).getTime();
+  return !Number.isFinite(end) || end > Date.now();
+};
+
 const annotateMarkets = (markets, status, timestamp) =>
-  (Array.isArray(markets) ? markets : []).map((market) => ({
-    ...market,
-    analysisStatus: market.analysisStatus || status,
-    lastAnalyzedAt: market.lastAnalyzedAt || timestamp || null
-  }));
+  (Array.isArray(markets) ? markets : [])
+    .filter(isActiveMarket)
+    .map((market) => ({
+      ...market,
+      analysisStatus: market.analysisStatus || status,
+      lastAnalyzedAt: market.lastAnalyzedAt || timestamp || null
+    }));
 
 const isDailyStale = (date, timestamp) => {
   const today = new Date().toISOString().split('T')[0];
@@ -594,7 +595,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.json(cached.data);
     }
 
-    const prompt = `Model: ${OPENROUTER_MODEL}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence.
+    const prompt = `Model: ${OPENROUTER_MODEL}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED but ACTIONABLE probabilities. Anchor to market, then identify whether there is a tradable mispricing.
 
 Context
 - Date: ${today}
@@ -603,11 +604,12 @@ Context
 - Market odds: ${currentOdds}
 - Volume: $${(volume || 0).toLocaleString()}
 
-Protocol (Critical for Brier Score)
-1) Anchoring: Start at market odds. Only deviate if you have a CLEAR, DOCUMENTED reason.
-2) Conservative Bias: If evidence is mixed, stay WITHIN ±2% of market odds.
-3) No Extremes: Never exceed 90% or go below 10% unless the event is virtually certain (e.g., historical fact).
-4) Synthesis: Output aiProbability for "${outcomeA}". 
+Protocol
+1) Start at market odds, then adjust for concrete catalysts: timing, liquidity, injuries, polling, macro/news, rules, and base rates.
+2) If evidence is mixed, stay close to market. If evidence is clearly mispriced, move 3-8 percentage points; only move more for very strong evidence.
+3) No fake precision: avoid tiny +/-0.1% changes. If there is no tradable edge, return market odds and explain why.
+4) No extremes: never exceed 92% or go below 8% unless the event is virtually certain.
+5) Output aiProbability for "${outcomeA}".
 
 Return ONLY raw JSON:
 - aiProbability: number 0-1 (calibrated)
@@ -657,33 +659,20 @@ Return ONLY raw JSON:
     const prediction = parsed.prediction ?? outcomeA;
     const confidence = parsed.confidence ?? 5;
 
-    // AMÉLIORATION BRIER SCORE : Calibration par lissage (Shrinkage)
-    // On mélange la prédiction IA avec celle du marché (30% IA / 70% Marché)
-    // Cela réduit drastiquement l'erreur quadratique quand l'IA est sur-confiante.
-    aiProbability = (aiProbability * 0.3) + (marketProb * 0.7);
+    // Calibration by shrinkage: keep market anchoring without erasing tradable edges.
+    aiProbability = (aiProbability * 0.45) + (marketProb * 0.55);
 
     // Clamping supplémentaire pour éviter les probabilités extrêmes
     aiProbability = Math.max(0.08, Math.min(0.92, aiProbability));
 
-    const edge = Math.abs(aiProbability - marketProb);
     const outcomes_arr = outcomes || ["Yes", "No"];
-
-    // Calcul de Kelly conservateur (Quarter-Kelly)
-    // f = (bp - q) / b
-    // b = payout (net odds) = (1/price) - 1
-    const p_kelly = aiProbability >= 0.5 ? aiProbability : (1 - aiProbability);
-    const price_kelly = aiProbability >= 0.5 ? marketProb : (1 - marketProb);
-
-    let kellyPercentage = 0;
-    if (edge > 0.035 && confidence >= 5) { // Seuil d'edge et confiance plus élevé
-      const b = (1 / price_kelly) - 1;
-      const q = 1 - p_kelly;
-      if (b > 0) {
-        const fullKelly = (b * p_kelly - q) / b;
-        // On utilise Quarter-Kelly (0.25) et on cap à 10% max du bankroll
-        kellyPercentage = Math.max(0, Math.min(0.1, fullKelly * 0.25)) * 100;
-      }
-    }
+    const kellyPercentage = computeKellyPercentage({
+      aiProbabilityForOutcomeA: aiProbability,
+      prediction,
+      outcomes: outcomes_arr,
+      marketProbOutcomeA: marketProb,
+      confidence
+    });
 
     const payload = {
       aiProbability,
