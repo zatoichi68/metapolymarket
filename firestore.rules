@@ -15,32 +15,19 @@ service cloud.firestore {
     // Collection daily_picks - Cache des analyses quotidiennes (PUBLIC)
     match /daily_picks/{dateKey} {
       allow read: if true;
-      allow create: if isValidDateKey(dateKey)
-                    && request.resource.data.keys().hasAll(['date', 'markets', 'updatedAt'])
-                    && request.resource.data.date == dateKey
-                    && request.resource.data.markets is list;
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     // Collection prediction_history - Historique des prédictions (PUBLIC)
     match /prediction_history/{dateKey} {
       allow read: if true;
-      allow create, update: if isValidDateKey(dateKey)
-                            && request.resource.data.keys().hasAll(['date', 'predictions', 'stats', 'createdAt'])
-                            && request.resource.data.date == dateKey;
-      allow delete: if false;
+      allow write: if false;
     }
 
     // Collection hourly_picks - Mises à jour horaires (PUBLIC - filtrage côté client)
     match /hourly_picks/{hourKey} {
       allow read: if true;
-      allow create: if isValidHourKey(hourKey)
-                    && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt'])
-                    && request.resource.data.hour == hourKey
-                    && request.resource.data.markets is list;
-      allow update: if isValidHourKey(hourKey)
-                    && request.resource.data.keys().hasAll(['timestamp', 'hour', 'markets', 'updatedAt']);
-      allow delete: if false;
+      allow write: if false;
     }
 
     // ===== COLLECTIONS SENSIBLES - ACCÈS BACKEND UNIQUEMENT =====
@@ -61,4 +48,3 @@ service cloud.firestore {
     }
   }
 }
-

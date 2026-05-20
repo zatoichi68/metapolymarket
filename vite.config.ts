@@ -25,6 +25,39 @@ function apiPlugin(): Plugin {
       }
     },
     configureServer(server) {
+      const proxyToBackend = (routePrefix: string) => async (req: any, res: any) => {
+        try {
+          const base = envRef?.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL || 'https://metapolymarket.web.app';
+          const requestPath = req.originalUrl || `${routePrefix}${req.url || ''}`;
+          const targetUrl = `${base}${requestPath}`;
+          const headers: Record<string, string> = { 'Content-Type': req.headers['content-type'] || 'application/json' };
+
+          let body: string | undefined;
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            body = '';
+            for await (const chunk of req) {
+              body += chunk;
+            }
+          }
+
+          const upstream = await fetch(targetUrl, { method: req.method, headers, body });
+          res.statusCode = upstream.status;
+          for (const [k, v] of upstream.headers) {
+            res.setHeader(k, v);
+          }
+          res.end(await upstream.text());
+        } catch (error) {
+          console.error('Dev backend proxy failed:', error);
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Dev backend proxy failed' }));
+        }
+      };
+
+      server.middlewares.use('/api/picks/latest', proxyToBackend('/api/picks/latest'));
+      server.middlewares.use('/api/health', proxyToBackend('/api/health'));
+      server.middlewares.use('/api/premium', proxyToBackend('/api/premium'));
+
       // Dev handler for /api/polymarket/events -> hits production backend with API key
       server.middlewares.use('/api/polymarket/events', async (req, res) => {
         try {

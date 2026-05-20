@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyMarkets, getHourlyMarkets } from './services/polymarketService';
-import { savePredictionsToHistory, getFavoritedMarketsFromHistory } from './services/historyService';
+import { getFavoritedMarketsFromHistory } from './services/historyService';
 import { trackPageView, trackPremiumSignup, trackMarketView, trackBetClick } from './services/firebase';
 import { PredictionHistory } from './components/PredictionHistory';
 import { EdgeAlerts, getHighEdgeMarkets } from './components/EdgeAlerts';
@@ -14,8 +14,11 @@ import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriang
 const App: React.FC = () => {
   const [markets, setMarkets] = useState<MarketAnalysis[]>([]);
   const [dailyTimestamp, setDailyTimestamp] = useState<string | null>(null);
+  const [dailyStale, setDailyStale] = useState<boolean>(true);
   const [hourlyMarkets, setHourlyMarkets] = useState<MarketAnalysis[]>([]);
   const [hourlyTimestamp, setHourlyTimestamp] = useState<string | null>(null);
+  const [hourlyStale, setHourlyStale] = useState<boolean>(true);
+  const [dataNotice, setDataNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(Category.ALL);
@@ -67,20 +70,10 @@ const App: React.FC = () => {
 
       if (storedPremium && storedEmail) {
         try {
-          // Determine API URL
-          let apiUrl: string;
-          const PROJECT_ID = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'demo-project';
-          if ((import.meta as any).env?.DEV) {
-            apiUrl = `http://127.0.0.1:5001/${PROJECT_ID}/us-central1/checkPremiumStatus`;
-          } else {
-            // Cloud Run URL for Firebase Functions v2
-            apiUrl = 'https://checkpremiumstatus-krtdefxoka-uc.a.run.app';
-          }
-
-          const response = await fetch(apiUrl, {
+          const response = await fetch('/api/premium/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: storedEmail })
+            body: JSON.stringify({ email: storedEmail.trim().toLowerCase() })
           });
 
           if (response.ok) {
@@ -134,41 +127,40 @@ const App: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     setError(null);
+    setDataNotice(null);
     try {
       // Load daily markets (always)
       const dailyData = await getDailyMarkets();
-      if (dailyData) {
+      if (dailyData && dailyData.markets.length > 0) {
         setMarkets(dailyData.markets);
         setDailyTimestamp(dailyData.timestamp);
-
-        // Save to prediction history
-        const todayKey = new Date().toISOString().split('T')[0];
-        if (dailyData.markets.length > 0 && dailyData.date === todayKey) {
-          savePredictionsToHistory(dailyData.markets).catch(console.error);
-        }
+        setDailyStale(dailyData.stale);
+        if (dailyData.message) setDataNotice(dailyData.message);
       } else {
-        setMarkets([]);
-        setDailyTimestamp(null);
+        setDailyStale(true);
+        setDataNotice(dailyData?.message || 'Daily picks are unavailable.');
       }
 
       // Load hourly markets if premium
       if (isPremium) {
         const hourlyData = await getHourlyMarkets();
-        if (hourlyData) {
+        if (hourlyData && hourlyData.markets.length > 0) {
           setHourlyMarkets(hourlyData.markets);
           setHourlyTimestamp(hourlyData.timestamp);
+          setHourlyStale(hourlyData.stale);
         } else {
-          setHourlyMarkets([]);
-          setHourlyTimestamp(null);
+          setHourlyStale(true);
+          if (dataSource === 'hourly') {
+            setDataSource('daily');
+            setDataNotice(hourlyData?.message || 'Hourly picks are unavailable; showing daily picks.');
+          }
         }
       }
     } catch (err) {
       console.error(err);
-      setError("Market data is currently unavailable.");
-      setMarkets([]);
-      setDailyTimestamp(null);
-      setHourlyMarkets([]);
-      setHourlyTimestamp(null);
+      setError(activeMarkets.length > 0
+        ? "Refresh failed. Showing the last data loaded in this session."
+        : "Market data is currently unavailable.");
     } finally {
       setLoading(false);
     }
@@ -189,6 +181,14 @@ const App: React.FC = () => {
   const activeTimestamp = (isPremium && dataSource === 'hourly' && hourlyTimestamp)
     ? hourlyTimestamp
     : dailyTimestamp;
+
+  const activeStale = (isPremium && dataSource === 'hourly' && hourlyTimestamp)
+    ? hourlyStale
+    : dailyStale;
+
+  const fallbackToDaily = isPremium && dataSource === 'hourly' && hourlyMarkets.length === 0 && markets.length > 0;
+
+  const fallbackCount = activeMarkets.filter(m => m.analysisStatus === 'fallback').length;
 
   // Format timestamp to local DD/MM/YYYY HH:MM:SS
   const formatTimestamp = (ts: string | null) => {
@@ -442,18 +442,34 @@ const App: React.FC = () => {
         </div>
 
         {/* Data Source Info */}
-        <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-4">
+        <div className={`mb-6 rounded-xl p-4 border ${
+          activeStale
+            ? 'bg-amber-500/10 border-amber-500/30'
+            : fallbackCount > 0
+              ? 'bg-sky-500/10 border-sky-500/30'
+              : 'bg-emerald-500/10 border-emerald-500/30'
+        }`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Activity className="text-blue-400" size={20} />
+              <Activity className={activeStale ? 'text-amber-400' : 'text-emerald-400'} size={20} />
               <div>
                 <h3 className="text-white font-semibold flex items-center gap-2">
                   {dataSource === 'hourly' ? 'Hourly Update' : 'Daily Update'}
                   {dataSource === 'hourly' && <span className="text-xs bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE</span>}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                    activeStale ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                  }`}>
+                    {activeStale ? 'STALE CACHE' : 'FRESH CACHE'}
+                  </span>
                 </h3>
                 <p className="text-slate-400 text-sm">
                   Last update: {formatTimestamp(activeTimestamp)}
+                  {fallbackToDaily && ' · Hourly unavailable, showing daily picks'}
+                  {fallbackCount > 0 && ` · ${fallbackCount} model fallback${fallbackCount === 1 ? '' : 's'}`}
                 </p>
+                {(error || dataNotice) && (
+                  <p className="text-xs text-amber-300 mt-1">{error || dataNotice}</p>
+                )}
               </div>
             </div>
             {isPremium && (
@@ -622,7 +638,7 @@ const App: React.FC = () => {
               <div key={i} className="h-80 bg-slate-800 rounded-xl border border-slate-700/50"></div>
             ))}
           </div>
-        ) : error ? (
+        ) : error && activeMarkets.length === 0 ? (
           <div className="col-span-full text-center py-20 flex flex-col items-center bg-slate-900/30 rounded-xl border border-red-900/30">
             <div className="bg-red-500/10 p-4 rounded-full mb-4">
               <AlertTriangle size={48} className="text-red-500" />
@@ -655,7 +671,10 @@ const App: React.FC = () => {
             ) : (
               <div className="col-span-full text-center py-20 text-slate-500 flex flex-col items-center">
                 <BarChart3 size={48} className="mb-4 opacity-50" />
-                <p className="text-lg">No markets found matching your filters.</p>
+                <p className="text-lg">{activeMarkets.length === 0 ? 'No cached market picks are available yet.' : 'No markets found matching your filters.'}</p>
+                {activeMarkets.length === 0 && (
+                  <p className="text-sm text-slate-600 mt-2">The backend cache is warming up. Try again shortly.</p>
+                )}
                 {showContrarian && (
                   <p className="text-sm text-slate-600 mt-2">The Swarm AI currently agrees with the crowd on all selected markets.</p>
                 )}

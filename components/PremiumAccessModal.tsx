@@ -30,35 +30,17 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
     }
   })();
 
-  // Retrieve Project ID from env vars (same as firebase.ts)
-  const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-project';
-  
-  // Cloud Run URLs for Firebase Functions v2 (project hash: krtdefxoka)
-  const CLOUD_RUN_URLS: Record<string, string> = {
-    sendPremiumVerificationCode: 'https://sendpremiumverificationcode-krtdefxoka-uc.a.run.app',
-    validatePremiumCode: 'https://validatepremiumcode-krtdefxoka-uc.a.run.app',
-    checkPremiumStatus: 'https://checkpremiumstatus-krtdefxoka-uc.a.run.app',
-  };
-  
-  // Helper to determine API URL dynamically
-  const getApiUrl = (funcName: string) => {
-      // Force production URLs for now to allow local testing against real backend
-      return CLOUD_RUN_URLS[funcName] || `https://us-central1-${PROJECT_ID}.cloudfunctions.net/${funcName}`; 
-  };
-
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const url = getApiUrl('sendPremiumVerificationCode');
-      console.log('Attempting to fetch URL:', url); // Debug log
-
-      const response = await fetch(url, {
+      const response = await fetch('/api/premium/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, referralCode }),
+        body: JSON.stringify({ email: normalizedEmail, referralCode }),
       });
 
       const data = await response.json();
@@ -68,10 +50,12 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       }
 
       if (data.alreadyVerified) {
+        localStorage.setItem('metapolymarket_email', normalizedEmail);
         // Automatically grant access if already verified
         onSuccess();
         onClose();
       } else {
+        setEmail(normalizedEmail);
         setStep('code');
       }
     } catch (err: any) {
@@ -86,15 +70,13 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const url = getApiUrl('validatePremiumCode');
-      console.log('Attempting to fetch URL:', url); // Debug log
-      
-      const response = await fetch(url, {
+      const response = await fetch('/api/premium/validate-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code, referralCode }),
+        body: JSON.stringify({ email: normalizedEmail, code: code.trim(), referralCode }),
       });
 
       const data = await response.json();
@@ -106,7 +88,7 @@ export const PremiumAccessModal: React.FC<PremiumAccessModalProps> = ({
       onSuccess();
       
       // Store email for re-verification
-      localStorage.setItem('metapolymarket_email', email);
+      localStorage.setItem('metapolymarket_email', normalizedEmail);
       
       onClose();
     } catch (err: any) {

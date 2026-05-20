@@ -74,6 +74,31 @@ function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function normalizeReferralCode(referralCode) {
+  return referralCode ? String(referralCode).trim().toUpperCase() : null;
+}
+
+function parseModelJson(text) {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Empty model response');
+  }
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('Model response was not valid JSON');
+  }
+}
+
 /**
  * Cloud Function: Send Premium Verification Code
  * Expects body: { email: string }
@@ -88,7 +113,8 @@ export const sendPremiumVerificationCode = onRequest({
     return;
   }
 
-  const { email, referralCode } = req.body;
+  const email = normalizeEmail(req.body?.email);
+  const referralCode = normalizeReferralCode(req.body?.referralCode);
   if (!email || !email.includes('@')) {
     res.status(400).json({ success: false, error: 'Invalid email address' });
     return;
@@ -103,12 +129,26 @@ export const sendPremiumVerificationCode = onRequest({
     }
 
     // 2. Generate and store code
+    const verificationRef = db.collection('premium_verifications').doc(email);
+    const existingVerification = await verificationRef.get();
+    if (existingVerification.exists) {
+      const existingData = existingVerification.data();
+      const lastSentAt = existingData.lastSentAt || existingData.createdAtMs || 0;
+      if (Date.now() - lastSentAt < 60 * 1000) {
+        res.status(429).json({ success: false, error: 'Please wait before requesting another code.' });
+        return;
+      }
+    }
+
     const code = generateCode();
     const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
 
-    await db.collection('premium_verifications').doc(email).set({
+    await verificationRef.set({
       code,
       expiresAt,
+      attempts: 0,
+      lastSentAt: Date.now(),
+      createdAtMs: Date.now(),
       createdAt: new Date().toISOString(),
       referralCode: referralCode || null
     });
@@ -155,7 +195,14 @@ export const validatePremiumCode = onRequest({
     return;
   }
 
-  const { email, code, referralCode } = req.body;
+  const email = normalizeEmail(req.body?.email);
+  const code = String(req.body?.code || '').trim();
+  const referralCode = normalizeReferralCode(req.body?.referralCode);
+
+  if (!email || !code) {
+    res.status(400).json({ success: false, error: 'Email and code are required' });
+    return;
+  }
 
   try {
     // 1. Get stored code
@@ -168,6 +215,11 @@ export const validatePremiumCode = onRequest({
     }
 
     const data = doc.data();
+    const attempts = Number(data.attempts || 0);
+    if (attempts >= 5) {
+      res.status(429).json({ success: false, error: 'Too many attempts. Please request a new code.' });
+      return;
+    }
 
     // 2. Validate
     if (Date.now() > data.expiresAt) {
@@ -176,6 +228,7 @@ export const validatePremiumCode = onRequest({
     }
 
     if (data.code !== code) {
+      await docRef.set({ attempts: attempts + 1, lastAttemptAt: Date.now() }, { merge: true });
       res.status(400).json({ success: false, error: 'Invalid code' });
       return;
     }
@@ -210,6 +263,7 @@ export const validatePremiumCode = onRequest({
       email,
       verified: true,
       joinedAt: new Date().toISOString(),
+      lastVerifiedAt: new Date().toISOString(),
       plan,
       referralCode: effectiveReferral,
       referralSlot
@@ -239,7 +293,7 @@ export const checkPremiumStatus = onRequest({
     return;
   }
 
-  const { email } = req.body;
+  const email = normalizeEmail(req.body?.email);
 
   if (!email) {
     res.status(400).json({ isPremium: false });
@@ -318,9 +372,7 @@ Return ONLY raw JSON:
     throw new Error('No response from OpenRouter');
   }
 
-  // Clean potential markdown code blocks
-  const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleanText);
+  return parseModelJson(text);
 }
 
 const clamp01 = (x) => {
@@ -500,6 +552,8 @@ async function fetchAndAnalyzeMarkets(apiKey) {
           confidence
         }),
         riskFactor: analysis.riskFactor ?? "Market volatility",
+        analysisStatus: "fresh",
+        lastAnalyzedAt: new Date().toISOString(),
         endDate: event.endDate
       });
       successCount++;
@@ -522,6 +576,8 @@ async function fetchAndAnalyzeMarkets(apiKey) {
         confidence: 3,
         kellyPercentage: 0,
         riskFactor: "Model throttled/unavailable",
+        analysisStatus: "fallback",
+        lastAnalyzedAt: new Date().toISOString(),
         endDate: event.endDate,
         fallback: true
       });

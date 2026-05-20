@@ -31,8 +31,19 @@ export interface MarketAnalysis {
   confidence: number; // Meta-Oracle confidence level (1-10)
   kellyPercentage: number; // Kelly criterion: optimal bet size as % of bankroll
   riskFactor: string; // Principal risk factor that could invalidate the prediction
+  analysisStatus?: 'fresh' | 'cached' | 'fallback';
+  lastAnalyzedAt?: string;
   probChange?: number; // Change in market probability since start of day (intraday trend)
   endDate?: string;
+}
+
+export interface PicksResponse {
+  source: 'daily' | 'hourly';
+  date?: string;
+  timestamp: string | null;
+  stale: boolean;
+  markets: MarketAnalysis[];
+  message?: string;
 }
 
 export interface ResolvedMarket {

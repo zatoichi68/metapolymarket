@@ -1,291 +1,91 @@
-import { PolymarketEvent, MarketAnalysis, ResolvedMarket } from '../types';
-import { analyzeMarket } from './aiService';
-import { db } from './firebase';
-import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { PicksResponse, PolymarketEvent, ResolvedMarket } from '../types';
 
-// Note: Gamma API (Public Data) does not generally require an API Key.
-// Providing a key (e.g. via headers) can sometimes help with rate limits, 
-// but often causes CORS issues when using proxies. 
-// We proceed without the key for maximum compatibility with the public endpoint.
-const API_URL = '/api/polymarket/events?limit=200';
-const API_KEY = (import.meta as any).env?.VITE_API_AUTH_TOKEN || undefined;
-const PROXY_URL = 'https://corsproxy.io/?';
-
-// In-memory cache (client-side) to throttle Polymarket fetch + AI analyses
-const MARKET_CACHE_TTL_MS = 30_000; // 30s
-let marketCache: { data: MarketAnalysis[]; fetchedAt: number } | null = null;
-
-/**
- * Fetches fresh data from Polymarket and runs AI analysis.
- * (This is the expensive operation we want to minimize)
- */
-const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
-  if (marketCache && Date.now() - marketCache.fetchedAt < MARKET_CACHE_TTL_MS) {
-    return marketCache.data;
-  }
-  try {
-    const response = await fetch(API_URL, {
-      headers: API_KEY ? { 'x-api-key': API_KEY } : undefined
-    });
+const fetchJson = async <T>(url: string): Promise<T> => {
+    const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Network response was not ok`);
+        throw new Error(`Request failed: ${response.status}`);
     }
-    const data: PolymarketEvent[] = await response.json();
-
-    if (!Array.isArray(data)) {
-        throw new Error('API response is not an array');
-    }
-
-    // Process data preparation first
-    const preparedData = data.map((event) => {
-        const market = event.markets?.[0];
-        if (!market || !market.outcomePrices) return null;
-
-        let prob = 0.5;
-        let outcomes = ["Yes", "No"]; // Default
-
-        try {
-           const prices = typeof market.outcomePrices === 'string' 
-             ? JSON.parse(market.outcomePrices) 
-             : market.outcomePrices;
-             
-           prob = parseFloat(prices[0]);
-           
-           if (market.outcomes) {
-               const parsedOutcomes = typeof market.outcomes === 'string'
-                ? JSON.parse(market.outcomes)
-                : market.outcomes;
-               
-               if (Array.isArray(parsedOutcomes) && parsedOutcomes.length >= 2) {
-                   outcomes = parsedOutcomes;
-               }
-           }
-
-           if (market.groupItemTitle && outcomes[0] === "Yes") {
-               outcomes = [market.groupItemTitle, "Other"];
-           }
-
-        } catch (e) {
-           return null;
-        }
-
-        if (isNaN(prob)) return null;
-
-        return { event, market, prob, outcomes };
-    }).filter(item => item !== null && item.prob > 0.01 && item.prob < 0.99);
-
-    // Analyze in parallel - continue even if some fail
-    const results = await Promise.allSettled(
-        preparedData.map(async (item) => {
-            if (!item) return null;
-            const { event, market, prob, outcomes } = item;
-            
-            return await analyzeMarket(
-                event.id,
-                event.slug || "",
-                event.title,
-                prob,
-                parseFloat(market.volume || "0"),
-                event.image,
-                outcomes,
-                event.endDate
-            );
-        })
-    );
-
-    // Extract successful results, log failures
-    const analyzedMarkets = results.map((result, index) => {
-        if (result.status === 'fulfilled') {
-            return result.value;
-        } else {
-            const item = preparedData[index];
-            console.warn(`Analysis failed for ${item?.event.title}:`, result.reason);
-            return null;
-        }
-    });
-
-    const filtered = analyzedMarkets.filter((item): item is MarketAnalysis => item !== null);
-    marketCache = { data: filtered, fetchedAt: Date.now() };
-    return filtered;
-
-  } catch (error) {
-    console.error("Failed to fetch Polymarket data.", error);
-    throw error;
-  }
+    return response.json() as Promise<T>;
 };
 
+const emptyPicks = (source: 'daily' | 'hourly', message: string): PicksResponse => ({
+    source,
+    timestamp: null,
+    stale: true,
+    markets: [],
+    message
+});
+
 /**
- * Main entry point.
- * Checks Firestore for the most recent daily cache. If none, runs fresh analysis and saves it.
+ * Reads the canonical dashboard picks from the backend cache endpoint.
+ * The browser should not trigger fresh AI analysis or write cache documents.
  */
-export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string, date: string } | null> => {
-    // 1. If Firebase is not configured, fallback to live fetch immediately.
-    if (!db) {
-        const freshData = await fetchAndAnalyzeFreshMarkets();
-        return freshData.length > 0
-            ? { markets: freshData, timestamp: new Date().toISOString(), date: new Date().toISOString().split('T')[0] }
-            : null;
-    }
+export const getLatestPicks = async (source: 'daily' | 'hourly' | 'auto' = 'auto'): Promise<PicksResponse> => {
+    const data = await fetchJson<PicksResponse>(`/api/picks/latest?source=${source}`);
+    return {
+        ...data,
+        source: data.source || (source === 'hourly' ? 'hourly' : 'daily'),
+        markets: Array.isArray(data.markets) ? data.markets : [],
+        stale: Boolean(data.stale)
+    };
+};
 
+export const getDailyMarkets = async (): Promise<PicksResponse | null> => {
     try {
-        // 2. Query for TODAY's cache specifically (using UTC Date to match Cloud Function)
-        const todayKey = new Date().toISOString().split('T')[0];
-        const docRef = doc(db, "daily_picks", todayKey);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            // Validate data integrity
-            if (Array.isArray(data.markets) && data.markets.length > 0) {
-                const timestamp = data.timestamp || data.updatedAt || new Date().toISOString();
-                console.log(`Loading cached data for today: ${data.date} (timestamp: ${timestamp})`);
-                const markets = data.markets as MarketAnalysis[];
-                return { markets, timestamp, date: data.date || todayKey };
-            }
-        }
-
-        // 3. No cache for today yet: use the latest daily cache before generating fresh data.
-        const dailyPicksRef = collection(db, "daily_picks");
-        const latestQuery = query(dailyPicksRef, orderBy("date", "desc"), limit(1));
-        const latestSnapshot = await getDocs(latestQuery);
-
-        if (!latestSnapshot.empty) {
-            const latestData = latestSnapshot.docs[0].data();
-            if (Array.isArray(latestData.markets) && latestData.markets.length > 0) {
-                const timestamp = latestData.timestamp || latestData.updatedAt || new Date().toISOString();
-                console.log(`Loading latest cached data: ${latestData.date} (timestamp: ${timestamp})`);
-                return {
-                    markets: latestData.markets as MarketAnalysis[],
-                    timestamp,
-                    date: latestData.date || latestSnapshot.docs[0].id
-                };
-            }
-        }
-
-        // 4. No usable cache: Fetch & Analyze fresh
-        console.log(`No recent daily cache found. Fetching fresh data...`);
-        const freshData = await fetchAndAnalyzeFreshMarkets();
-
-        // 5. Save to Cache for today (if we got data)
-        if (freshData.length > 0) {
-            // Firestore does not accept 'undefined' values.
-            const todayKey = new Date().toISOString().split('T')[0];
-            const sanitizedData = freshData.map(item => {
-                const cleanItem = { ...item };
-                // Remove undefined keys
-                Object.keys(cleanItem).forEach(key => {
-                    if (cleanItem[key as keyof MarketAnalysis] === undefined) {
-                        delete cleanItem[key as keyof MarketAnalysis];
-                    }
-                });
-                return cleanItem;
-            });
-
-            const docRef = doc(db, "daily_picks", todayKey);
-            const now = new Date().toISOString();
-            await setDoc(docRef, {
-                date: todayKey,
-                markets: sanitizedData,
-                updatedAt: now,
-                timestamp: now
-            });
-            console.log(`Saved fresh data to ${todayKey}`);
-            return { markets: sanitizedData, timestamp: now, date: todayKey };
-        }
-
-        return null;
-
+        return await getLatestPicks('daily');
     } catch (error) {
-        console.error("Error interacting with Firebase, falling back to live data:", error);
-        // Fallback ensures app doesn't crash if Firebase quota exceeded or network error
-        const freshData = await fetchAndAnalyzeFreshMarkets();
-        return freshData.length > 0
-            ? { markets: freshData, timestamp: new Date().toISOString(), date: new Date().toISOString().split('T')[0] }
-            : null;
+        console.error('Error fetching daily picks:', error);
+        return emptyPicks('daily', 'Daily market data is currently unavailable.');
+    }
+};
+
+export const getHourlyMarkets = async (): Promise<PicksResponse | null> => {
+    try {
+        return await getLatestPicks('hourly');
+    } catch (error) {
+        console.error('Error fetching hourly picks:', error);
+        return emptyPicks('hourly', 'Hourly market data is currently unavailable.');
     }
 };
 
 /**
- * Get the latest hourly markets (Premium feature)
- * Returns the most recent hourly analysis from Firestore
- */
-export const getHourlyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string } | null> => {
-    if (!db) {
-        console.log("Firebase not configured, hourly markets unavailable");
-        return null;
-    }
-
-    try {
-        // Get the most recent hourly_picks document
-        const hourlyRef = collection(db, "hourly_picks");
-        const q = query(hourlyRef, orderBy("timestamp", "desc"), limit(1));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-            console.log("No hourly data available yet");
-            return null;
-        }
-
-        const latestDoc = querySnapshot.docs[0];
-        const data = latestDoc.data();
-        
-        return {
-            markets: data.markets as MarketAnalysis[],
-            timestamp: data.timestamp
-        };
-    } catch (error) {
-        console.error("Error fetching hourly markets:", error);
-        return null;
-    }
-};
-
-/**
- * Get resolved markets from Polymarket API (closed markets)
- * Used for backtesting purposes.
+ * Get resolved markets from Polymarket API (closed markets).
+ * Uses the backend proxy so the app does not depend on a third-party CORS proxy.
  */
 export const getResolvedMarkets = async (limitCount = 100): Promise<ResolvedMarket[]> => {
     try {
-        const url = `${PROXY_URL}${encodeURIComponent(`https://gamma-api.polymarket.com/events?limit=${limitCount}&closed=true&order=volume&ascending=false`)}`;
-        const response = await fetch(url);
-        if (!response.ok) return [];
-        const data = await response.json();
-        
+        const data = await fetchJson<PolymarketEvent[]>(
+            `/api/polymarket/events?limit=${limitCount}&closed=true&active=false`
+        );
+
         if (!Array.isArray(data)) return [];
 
         return data.map((event: any) => {
-             const market = event.markets?.[0];
-             if (!market || !market.outcomePrices || !market.outcomes) return null;
+            const market = event.markets?.[0];
+            if (!market || !market.outcomePrices || !market.outcomes) return null;
 
-             try {
-                 const prices = typeof market.outcomePrices === 'string' 
+            try {
+                const prices = typeof market.outcomePrices === 'string'
                     ? JSON.parse(market.outcomePrices)
                     : market.outcomePrices;
-                    
-                 const outcomes = typeof market.outcomes === 'string'
+                const outcomes = typeof market.outcomes === 'string'
                     ? JSON.parse(market.outcomes)
                     : market.outcomes;
-                 
-                 if (!Array.isArray(outcomes) || outcomes.length === 0) return null;
 
-                 // Find winning index using max price (more robust than >0.95 heuristic)
-                 const floats = prices.map((p: string | number) => parseFloat(String(p)));
-                 const winningIndex = floats.reduce((maxIdx: number, val: number, idx: number, arr: number[]) => {
-                    return val > arr[maxIdx] ? idx : maxIdx;
-                 }, 0);
+                const winnerIndex = prices.findIndex((p: string | number) => parseFloat(String(p)) > 0.99);
+                if (winnerIndex === -1) return null;
 
-                 const resolvedOutcome = outcomes[winningIndex];
-                 
-                 return {
-                     id: event.id,
-                     title: event.title,
-                     resolvedOutcome
-                 };
-             } catch (e) {
-                 return null;
-             }
-        }).filter((m: any): m is ResolvedMarket => m !== null);
-    } catch (e) {
-        console.error("Error fetching resolved markets:", e);
+                return {
+                    id: event.id,
+                    title: event.title,
+                    resolvedOutcome: outcomes[winnerIndex]
+                };
+            } catch {
+                return null;
+            }
+        }).filter((item): item is ResolvedMarket => item !== null);
+    } catch (error) {
+        console.error('Error fetching resolved markets:', error);
         return [];
     }
 };

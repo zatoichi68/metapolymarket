@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, getDocs, query, orderBy, limit, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { MarketAnalysis, ResolvedPrediction, BacktestStats } from '../types';
 import { getResolvedMarkets } from './polymarketService';
 
@@ -32,46 +32,6 @@ export interface DailyStats {
   avgEdge: number;
   avgKelly: number;
 }
-
-/**
- * Save today's predictions to history
- */
-export const savePredictionsToHistory = async (markets: MarketAnalysis[]): Promise<void> => {
-  if (!db) return;
-
-  const today = new Date().toISOString().split('T')[0];
-  const historyRef = doc(db, 'prediction_history', today);
-
-  // Store RAW values (for outcomes[0]) - the modal will handle adjustments
-  const records: PredictionRecord[] = markets.map(m => ({
-    id: `${today}-${m.id}`,
-    date: today,
-    marketId: m.id,
-    slug: m.slug,               // Store slug for Polymarket URL
-    title: m.title,
-    aiPrediction: m.prediction,
-    aiProb: m.aiProb,           // Raw: probability for outcomes[0]
-    marketProb: m.marketProb,   // Raw: probability for outcomes[0]
-    edge: m.edge,               // Raw edge (will be recalculated by modal)
-    kellyPercentage: m.kellyPercentage || 0,
-    reasoning: m.reasoning,
-    riskFactor: m.riskFactor,
-    confidence: m.confidence,
-    outcomes: m.outcomes,
-    outcome: 'pending' as const
-  }));
-
-  await setDoc(historyRef, {
-    date: today,
-    predictions: records,
-    stats: {
-      totalPredictions: records.length,
-      avgEdge: records.reduce((sum, r) => sum + Math.abs(r.edge), 0) / records.length,
-      avgKelly: records.reduce((sum, r) => sum + r.kellyPercentage, 0) / records.length,
-    },
-    createdAt: new Date().toISOString()
-  });
-};
 
 /**
  * Get prediction history for the last N days

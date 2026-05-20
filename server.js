@@ -43,6 +43,21 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
 // Token simple pour protéger /api/analyze (à définir dans l'env : API_AUTH_TOKEN)
 const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || '';
+const APP_VERSION = process.env.npm_package_version || '0.0.0';
+const STARTED_AT = Date.now();
+const FIRESTORE_PROJECT_ID = process.env.FIRESTORE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'metapolymarket';
+const FUNCTIONS_BASE_URL = process.env.FUNCTIONS_BASE_URL || '';
+const FUNCTION_URLS = {
+  sendPremiumVerificationCode: process.env.SEND_PREMIUM_CODE_URL || `${FUNCTIONS_BASE_URL}/sendPremiumVerificationCode`,
+  validatePremiumCode: process.env.VALIDATE_PREMIUM_CODE_URL || `${FUNCTIONS_BASE_URL}/validatePremiumCode`,
+  checkPremiumStatus: process.env.CHECK_PREMIUM_STATUS_URL || `${FUNCTIONS_BASE_URL}/checkPremiumStatus`
+};
+
+if (!FUNCTIONS_BASE_URL && (!process.env.SEND_PREMIUM_CODE_URL || !process.env.VALIDATE_PREMIUM_CODE_URL || !process.env.CHECK_PREMIUM_STATUS_URL)) {
+  FUNCTION_URLS.sendPremiumVerificationCode = 'https://sendpremiumverificationcode-krtdefxoka-uc.a.run.app';
+  FUNCTION_URLS.validatePremiumCode = 'https://validatepremiumcode-krtdefxoka-uc.a.run.app';
+  FUNCTION_URLS.checkPremiumStatus = 'https://checkpremiumstatus-krtdefxoka-uc.a.run.app';
+}
 
 // Rate-limit minimaliste en mémoire pour /api/analyze
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -131,6 +146,245 @@ const computeKellyPercentage = ({
   return Math.round(f * 10000) / 100; // 2 décimales
 };
 
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+const firestoreValueToJson = (val) => {
+  if (!val) return null;
+  if (val.stringValue !== undefined) return val.stringValue;
+  if (val.integerValue !== undefined) return Number(val.integerValue);
+  if (val.doubleValue !== undefined) return Number(val.doubleValue);
+  if (val.booleanValue !== undefined) return val.booleanValue;
+  if (val.timestampValue !== undefined) return val.timestampValue;
+  if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(firestoreValueToJson);
+  if (val.mapValue !== undefined) {
+    const obj = {};
+    for (const [key, child] of Object.entries(val.mapValue.fields || {})) {
+      obj[key] = firestoreValueToJson(child);
+    }
+    return obj;
+  }
+  return null;
+};
+
+const firestoreDocToJson = (doc) => {
+  const obj = {};
+  for (const [key, value] of Object.entries(doc?.fields || {})) {
+    obj[key] = firestoreValueToJson(value);
+  }
+  return obj;
+};
+
+const annotateMarkets = (markets, status, timestamp) =>
+  (Array.isArray(markets) ? markets : []).map((market) => ({
+    ...market,
+    analysisStatus: market.analysisStatus || status,
+    lastAnalyzedAt: market.lastAnalyzedAt || timestamp || null
+  }));
+
+const isDailyStale = (date, timestamp) => {
+  const today = new Date().toISOString().split('T')[0];
+  if (!date || date !== today) return true;
+  const updated = timestamp ? new Date(timestamp).getTime() : 0;
+  return !Number.isFinite(updated) || Date.now() - updated > 26 * 60 * 60 * 1000;
+};
+
+const isHourlyStale = (timestamp) => {
+  const updated = timestamp ? new Date(timestamp).getTime() : 0;
+  return !Number.isFinite(updated) || Date.now() - updated > 2 * 60 * 60 * 1000;
+};
+
+const fetchFirestoreDocument = async (collectionName, docId) => {
+  const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${collectionName}/${docId}`;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  return firestoreDocToJson(await response.json());
+};
+
+const fetchLatestFirestoreDocument = async (collectionName, orderBy) => {
+  const params = new URLSearchParams({ pageSize: '1', orderBy });
+  const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${collectionName}?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  const body = await response.json();
+  const doc = body.documents?.[0];
+  return doc ? firestoreDocToJson(doc) : null;
+};
+
+const readDailyPicks = async () => {
+  const today = new Date().toISOString().split('T')[0];
+  const todaysDoc = await fetchFirestoreDocument('daily_picks', today);
+  const data = Array.isArray(todaysDoc?.markets) && todaysDoc.markets.length > 0
+    ? todaysDoc
+    : await fetchLatestFirestoreDocument('daily_picks', 'date desc');
+
+  const date = data?.date || today;
+  const timestamp = data?.timestamp || data?.updatedAt || null;
+  return {
+    source: 'daily',
+    date,
+    timestamp,
+    stale: isDailyStale(date, timestamp),
+    markets: annotateMarkets(data?.markets, 'cached', timestamp),
+    message: data ? undefined : 'No daily picks found'
+  };
+};
+
+const readHourlyPicks = async () => {
+  const data = await fetchLatestFirestoreDocument('hourly_picks', 'timestamp desc');
+  const timestamp = data?.timestamp || data?.updatedAt || null;
+  return {
+    source: 'hourly',
+    date: data?.hour,
+    timestamp,
+    stale: isHourlyStale(timestamp),
+    markets: annotateMarkets(data?.markets, 'cached', timestamp),
+    message: data ? undefined : 'No hourly picks found'
+  };
+};
+
+const proxyFunctionJson = async (functionName, payload) => {
+  const url = FUNCTION_URLS[functionName];
+  if (!url || url === `/${functionName}`) {
+    return { status: 503, body: { success: false, error: 'Function URL not configured' } };
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    body = { success: false, error: await response.text() };
+  }
+
+  return { status: response.status, body };
+};
+
+const parseModelJson = (text) => {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Empty model response');
+  }
+
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('Model response was not valid JSON');
+  }
+};
+
+const fallbackAnalysisPayload = ({ outcomes, marketProb, reason = 'AI unavailable, using market odds.' }) => ({
+  aiProbability: marketProb,
+  prediction: outcomes?.[0] || 'Yes',
+  reasoning: reason,
+  category: 'Other',
+  kellyPercentage: 0,
+  confidence: 3,
+  riskFactor: 'Model throttled/unavailable',
+  edge: 0,
+  analysisStatus: 'fallback',
+  lastAnalyzedAt: new Date().toISOString()
+});
+
+app.get('/api/picks/latest', async (req, res) => {
+  try {
+    const requestedSource = String(req.query.source || 'auto');
+    let data;
+
+    if (requestedSource === 'hourly') {
+      data = await readHourlyPicks();
+    } else if (requestedSource === 'auto') {
+      const hourly = await readHourlyPicks();
+      data = hourly.markets.length > 0 && !hourly.stale ? hourly : await readDailyPicks();
+    } else {
+      data = await readDailyPicks();
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.json(data);
+  } catch (error) {
+    console.error('Latest picks failed:', error);
+    res.status(503).json({
+      source: req.query.source === 'hourly' ? 'hourly' : 'daily',
+      timestamp: null,
+      stale: true,
+      markets: [],
+      message: 'Latest picks unavailable'
+    });
+  }
+});
+
+app.get('/api/health', async (_req, res) => {
+  const [daily, hourly, poly] = await Promise.allSettled([
+    readDailyPicks(),
+    readHourlyPicks(),
+    fetch('https://gamma-api.polymarket.com/events?limit=1&active=true&closed=false', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MetaPolymarket/1.0; +https://metapolymarket.com)' },
+      signal: AbortSignal.timeout(5000)
+    })
+  ]);
+
+  res.json({
+    ok: true,
+    version: APP_VERSION,
+    uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
+    model: OPENROUTER_MODEL,
+    firestoreProjectId: FIRESTORE_PROJECT_ID,
+    openRouterConfigured: Boolean(OPENROUTER_API_KEY),
+    daily: daily.status === 'fulfilled'
+      ? { timestamp: daily.value.timestamp, date: daily.value.date, stale: daily.value.stale, count: daily.value.markets.length }
+      : { stale: true, error: 'daily_unavailable' },
+    hourly: hourly.status === 'fulfilled'
+      ? { timestamp: hourly.value.timestamp, hour: hourly.value.date, stale: hourly.value.stale, count: hourly.value.markets.length }
+      : { stale: true, error: 'hourly_unavailable' },
+    polymarket: poly.status === 'fulfilled' && poly.value.ok ? 'ok' : 'degraded'
+  });
+});
+
+app.post('/api/premium/send-code', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ success: false, error: 'Invalid email address' });
+  }
+  const result = await proxyFunctionJson('sendPremiumVerificationCode', {
+    email,
+    referralCode: req.body?.referralCode || null
+  });
+  res.status(result.status).json(result.body);
+});
+
+app.post('/api/premium/validate-code', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const code = String(req.body?.code || '').trim();
+  if (!email || !code) {
+    return res.status(400).json({ success: false, error: 'Email and code are required' });
+  }
+  const result = await proxyFunctionJson('validatePremiumCode', {
+    email,
+    code,
+    referralCode: req.body?.referralCode || null
+  });
+  res.status(result.status).json(result.body);
+});
+
+app.post('/api/premium/status', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email) {
+    return res.status(400).json({ isPremium: false });
+  }
+  const result = await proxyFunctionJson('checkPremiumStatus', { email });
+  res.status(result.status).json(result.body);
+});
+
 // Recherche une analyse spécifique par slug ou ID (dans l'historique récent)
 app.get('/api/picks/find', async (req, res) => {
   const { slug } = req.query;
@@ -200,57 +454,9 @@ app.get('/api/picks/find', async (req, res) => {
 
 // Endpoint léger pour récupérer les analyses du jour (pour l'extension)
 app.get('/api/picks/today', async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-
-  // Cache simple serveur pour ne pas spammer Firestore à chaque appel d'extension
-  if (polyCache.dailyPicks && polyCache.dailyPicksDate === today && Date.now() < polyCache.dailyPicksExpires) {
-    return res.json(polyCache.dailyPicks);
-  }
-
   try {
-    // URL Firestore REST directe (puisque public en lecture) ou via Admin SDK si dispo (ici on n'a pas admin sdk init dans server.js, on a juste express)
-    // Ah, server.js n'a pas firebase-admin initialisé, c'est functions/index.js qui l'a.
-    // server.js est le serveur de dev/prod frontend node. 
-    // On va utiliser l'API REST Firestore public puisque les règles l'autorisent.
-
-    const projectId = 'metapolymarket-140799832958'; // ID du projet
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/daily_picks/${today}`;
-
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      // Si 404 (pas encore généré ajd), on essaie hier ? Ou on renvoie vide.
-      return res.json({ date: today, markets: [] });
-    }
-
-    const doc = await resp.json();
-
-    // Parser la structure Firestore REST horrible
-    // fields: { markets: { arrayValue: { values: [ { mapValue: { fields: ... } } ] } } }
-    const parseValue = (val) => {
-      if (val.stringValue !== undefined) return val.stringValue;
-      if (val.integerValue !== undefined) return Number(val.integerValue);
-      if (val.doubleValue !== undefined) return Number(val.doubleValue);
-      if (val.booleanValue !== undefined) return val.booleanValue;
-      if (val.arrayValue !== undefined) return (val.arrayValue.values || []).map(parseValue);
-      if (val.mapValue !== undefined) {
-        const obj = {};
-        for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
-          obj[k] = parseValue(v);
-        }
-        return obj;
-      }
-      return null;
-    };
-
-    const marketsRaw = doc.fields?.markets?.arrayValue?.values || [];
-    const markets = marketsRaw.map(parseValue);
-
-    // Mettre en cache pour 5 minutes
-    polyCache.dailyPicks = { date: today, markets };
-    polyCache.dailyPicksDate = today;
-    polyCache.dailyPicksExpires = Date.now() + 5 * 60 * 1000;
-
-    res.json({ date: today, markets });
+    const data = await readDailyPicks();
+    res.json({ date: data.date, timestamp: data.timestamp, stale: data.stale, markets: data.markets });
   } catch (e) {
     console.error('Error fetching picks:', e);
     res.status(500).json({ error: 'Failed to fetch picks' });
@@ -327,7 +533,12 @@ app.get('/api/polymarket/events', async (req, res) => {
 // Route API pour l'analyse AI (protège la clé OpenRouter)
 app.post('/api/analyze', async (req, res) => {
   if (!OPENROUTER_API_KEY) {
-    return res.status(503).json({ error: 'AI service unavailable - OPENROUTER_API_KEY not configured' });
+    const { outcomes = ['Yes', 'No'], marketProb = 0.5 } = req.body || {};
+    return res.json(fallbackAnalysisPayload({
+      outcomes,
+      marketProb: Number(marketProb) || 0.5,
+      reason: 'AI key unavailable, using market odds.'
+    }));
   }
 
   if (!API_AUTH_TOKEN) {
@@ -426,7 +637,11 @@ Return ONLY raw JSON:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenRouter API error:', errorText);
-      return res.status(503).json({ error: 'OpenRouter API error' });
+      return res.json(fallbackAnalysisPayload({
+        outcomes,
+        marketProb,
+        reason: 'AI service degraded, using market odds.'
+      }));
     }
 
     const data = await response.json();
@@ -436,9 +651,7 @@ Return ONLY raw JSON:
       throw new Error('No response from OpenRouter');
     }
 
-    // Clean potential markdown code blocks
-    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleanText);
+    const parsed = parseModelJson(text);
 
     let aiProbability = parsed.aiProbability ?? marketProb;
     const prediction = parsed.prediction ?? outcomeA;
@@ -480,7 +693,9 @@ Return ONLY raw JSON:
       kellyPercentage,
       confidence,
       riskFactor: parsed.riskFactor ?? "Market volatility",
-      edge: aiProbability - marketProb
+      edge: aiProbability - marketProb,
+      analysisStatus: 'fresh',
+      lastAnalyzedAt: new Date().toISOString()
     };
 
     analysisCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS });
@@ -488,7 +703,12 @@ Return ONLY raw JSON:
 
   } catch (error) {
     console.error('AI Analysis error:', error);
-    res.status(500).json({ error: 'AI analysis failed' });
+    const { outcomes = ['Yes', 'No'], marketProb = 0.5 } = req.body || {};
+    res.json(fallbackAnalysisPayload({
+      outcomes,
+      marketProb: Number(marketProb) || 0.5,
+      reason: 'AI parsing failed, using market odds.'
+    }));
   }
 });
 
