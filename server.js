@@ -607,9 +607,9 @@ Context
 Protocol
 1) Start at market odds, then adjust for concrete catalysts: timing, liquidity, injuries, polling, macro/news, rules, and base rates.
 2) If evidence is mixed, stay close to market. If evidence is clearly mispriced, move 3-8 percentage points; only move more for very strong evidence.
-3) No fake precision: avoid tiny +/-0.1% changes. If there is no tradable edge, return market odds and explain why.
-4) No extremes: never exceed 92% or go below 8% unless the event is virtually certain.
-5) Output aiProbability for "${outcomeA}".
+3) No fake precision: avoid tiny +/-0.1% changes. If there is no tradable edge, return market odds and explicitly say "No trade".
+4) Tail calibration: if the market is already below 8% or above 92%, do NOT force it back to 8/92; probabilities of 1-5% or 95-99% are allowed when base rates justify them.
+5) Output aiProbability for "${outcomeA}" and make the reasoning explain the alpha direction: buy "${outcomeA}", buy "${outcomeB}", or no trade.
 
 Return ONLY raw JSON:
 - aiProbability: number 0-1 (calibrated)
@@ -662,8 +662,7 @@ Return ONLY raw JSON:
     // Calibration by shrinkage: keep market anchoring without erasing tradable edges.
     aiProbability = (aiProbability * 0.45) + (marketProb * 0.55);
 
-    // Clamping supplémentaire pour éviter les probabilités extrêmes
-    aiProbability = Math.max(0.08, Math.min(0.92, aiProbability));
+    aiProbability = Math.max(0.01, Math.min(0.99, aiProbability));
 
     const outcomes_arr = outcomes || ["Yes", "No"];
     const kellyPercentage = computeKellyPercentage({
