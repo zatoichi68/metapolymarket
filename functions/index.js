@@ -452,10 +452,15 @@ const shouldReviewWithGrok = ({ title, category, prob, finalized }) => {
   const sensitive = /(iran|trump|china|taiwan|election|president|minister|regime|war|invade|nuclear|sanction|hormuz|fed|rate|oil|geopolitic)/i
     .test(`${title} ${category || ''}`);
   const tailMarket = prob <= 0.08 || prob >= 0.92;
-  const positiveEdge = finalized.calculatedEdge >= 0.03;
+  const absoluteEdge = Math.abs(finalized.calculatedEdge);
+  const actionablePositiveEdge = finalized.calculatedEdge >= 0.05;
   const weakConfidence = Number(finalized.confidence) < 5;
 
-  return positiveEdge || weakConfidence || tailMarket || sensitive || category === 'Politics';
+  return actionablePositiveEdge ||
+    (sensitive && absoluteEdge >= 0.02) ||
+    (category === 'Politics' && absoluteEdge >= 0.025) ||
+    (tailMarket && absoluteEdge >= 0.03) ||
+    (weakConfidence && finalized.calculatedEdge >= 0.04);
 };
 
 /**
