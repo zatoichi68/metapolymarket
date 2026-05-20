@@ -142,7 +142,8 @@ const App: React.FC = () => {
         setDailyTimestamp(dailyData.timestamp);
 
         // Save to prediction history
-        if (dailyData.markets.length > 0) {
+        const todayKey = new Date().toISOString().split('T')[0];
+        if (dailyData.markets.length > 0 && dailyData.date === todayKey) {
           savePredictionsToHistory(dailyData.markets).catch(console.error);
         }
       } else {

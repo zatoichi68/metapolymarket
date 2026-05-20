@@ -7,6 +7,7 @@ import type { Plugin } from 'vite';
 function apiPlugin(): Plugin {
   let geminiApiKey: string;
   let envRef: Record<string, string>;
+  let openRouterModel: string;
   const ANALYSIS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
   const analysisCache = new Map<string, { data: any; expiresAt: number }>();
   const makeCacheKey = ({ title, outcomes, marketProb, volume }: { title: string; outcomes: string[]; marketProb: number; volume?: number }) =>
@@ -18,6 +19,7 @@ function apiPlugin(): Plugin {
       // Charger la clé depuis .env (OPENROUTER_API_KEY) - jamais hardcodée !
       envRef = loadEnv(config.mode, process.cwd(), '');
       geminiApiKey = envRef.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
+      openRouterModel = envRef.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
       if (!geminiApiKey) {
         console.warn('⚠️  OPENROUTER_API_KEY not found in .env - AI analysis will fail');
       }
@@ -93,7 +95,7 @@ function apiPlugin(): Plugin {
 
           const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
           
-          const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
+          const prompt = `Model: ${openRouterModel}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: beat market odds with concise, disciplined JSON.
 
 Context
 - Date: ${today}
@@ -138,7 +140,7 @@ Critical rules for aiProbability:
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                model: 'google/gemma-2-9b-it',
+                model: openRouterModel,
                 messages: [
                   { role: 'user', content: prompt + '\n\nRespond ONLY with valid JSON, no markdown.' }
                 ]

@@ -118,11 +118,13 @@ const fetchAndAnalyzeFreshMarkets = async (): Promise<MarketAnalysis[]> => {
  * Main entry point.
  * Checks Firestore for the most recent daily cache. If none, runs fresh analysis and saves it.
  */
-export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string } | null> => {
+export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], timestamp: string, date: string } | null> => {
     // 1. If Firebase is not configured, fallback to live fetch immediately.
     if (!db) {
         const freshData = await fetchAndAnalyzeFreshMarkets();
-        return freshData.length > 0 ? { markets: freshData, timestamp: new Date().toISOString() } : null;
+        return freshData.length > 0
+            ? { markets: freshData, timestamp: new Date().toISOString(), date: new Date().toISOString().split('T')[0] }
+            : null;
     }
 
     try {
@@ -138,15 +140,33 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
                 const timestamp = data.timestamp || data.updatedAt || new Date().toISOString();
                 console.log(`Loading cached data for today: ${data.date} (timestamp: ${timestamp})`);
                 const markets = data.markets as MarketAnalysis[];
-                return { markets, timestamp };
+                return { markets, timestamp, date: data.date || todayKey };
             }
         }
 
-        // 3. No cache for today: Fetch & Analyze fresh
+        // 3. No cache for today yet: use the latest daily cache before generating fresh data.
+        const dailyPicksRef = collection(db, "daily_picks");
+        const latestQuery = query(dailyPicksRef, orderBy("date", "desc"), limit(1));
+        const latestSnapshot = await getDocs(latestQuery);
+
+        if (!latestSnapshot.empty) {
+            const latestData = latestSnapshot.docs[0].data();
+            if (Array.isArray(latestData.markets) && latestData.markets.length > 0) {
+                const timestamp = latestData.timestamp || latestData.updatedAt || new Date().toISOString();
+                console.log(`Loading latest cached data: ${latestData.date} (timestamp: ${timestamp})`);
+                return {
+                    markets: latestData.markets as MarketAnalysis[],
+                    timestamp,
+                    date: latestData.date || latestSnapshot.docs[0].id
+                };
+            }
+        }
+
+        // 4. No usable cache: Fetch & Analyze fresh
         console.log(`No recent daily cache found. Fetching fresh data...`);
         const freshData = await fetchAndAnalyzeFreshMarkets();
 
-        // 4. Save to Cache for today (if we got data)
+        // 5. Save to Cache for today (if we got data)
         if (freshData.length > 0) {
             // Firestore does not accept 'undefined' values.
             const todayKey = new Date().toISOString().split('T')[0];
@@ -170,7 +190,7 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
                 timestamp: now
             });
             console.log(`Saved fresh data to ${todayKey}`);
-            return { markets: sanitizedData, timestamp: now };
+            return { markets: sanitizedData, timestamp: now, date: todayKey };
         }
 
         return null;
@@ -179,7 +199,9 @@ export const getDailyMarkets = async (): Promise<{ markets: MarketAnalysis[], ti
         console.error("Error interacting with Firebase, falling back to live data:", error);
         // Fallback ensures app doesn't crash if Firebase quota exceeded or network error
         const freshData = await fetchAndAnalyzeFreshMarkets();
-        return freshData.length > 0 ? { markets: freshData, timestamp: new Date().toISOString() } : null;
+        return freshData.length > 0
+            ? { markets: freshData, timestamp: new Date().toISOString(), date: new Date().toISOString().split('T')[0] }
+            : null;
     }
 };
 

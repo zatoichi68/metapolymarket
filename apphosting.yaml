@@ -10,7 +10,7 @@ runConfig:
   concurrency: 80
 
 env:
-  # === API OpenRouter (Grok 4.1 Fast) ===
+  # === API OpenRouter (Grok 4.3) ===
   # Clé API sécurisée côté serveur uniquement (PAS de préfixe VITE_)
   - variable: OPENROUTER_API_KEY
     secret: OPENROUTER_API_KEY

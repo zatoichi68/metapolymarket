@@ -15,6 +15,7 @@ const smtpUser = defineSecret('SMTP_USER');
 const smtpPass = defineSecret('SMTP_PASS');
 const smtpFrom = defineSecret('SMTP_FROM');
 const smtpFromName = defineSecret('SMTP_FROM_NAME');
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
 
 // CORS Configuration - Restrict to allowed origins
 const ALLOWED_ORIGINS = [
@@ -268,7 +269,7 @@ async function analyzeMarket(title, outcomes, marketProb, volume, apiKey) {
   const outcomeB = outcomes[1] || "Other";
   const currentOdds = `${outcomeA}: ${Math.round(marketProb * 100)}%, ${outcomeB}: ${Math.round((1 - marketProb) * 100)}%`;
 
-  const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. 
+  const prompt = `Model: ${OPENROUTER_MODEL}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence.
 
 Context
 - Date: ${today}
@@ -301,9 +302,8 @@ Return ONLY raw JSON:
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'google/gemma-2-9b-it',
+      model: OPENROUTER_MODEL,
       messages: [{ role: 'user', content: prompt }],
-      // reasoning removed as gemma-2-9b-it doesn't support 'reasoning' param natively in some providers
     })
   });
 

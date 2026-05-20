@@ -40,6 +40,7 @@ app.use((req, res, next) => {
 
 // Clé API OpenRouter sécurisée côté serveur uniquement
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
 // Token simple pour protéger /api/analyze (à définir dans l'env : API_AUTH_TOKEN)
 const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || '';
 
@@ -382,7 +383,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.json(cached.data);
     }
 
-    const prompt = `Model: google/gemma-2-9b-it. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence. 
+    const prompt = `Model: ${OPENROUTER_MODEL}. Role: "Meta-Oracle" superforecaster (Tetlock/Nate Silver style). Goal: produce CALIBRATED probabilities. Anchor to market; only move with real evidence.
 
 Context
 - Date: ${today}
@@ -415,7 +416,7 @@ Return ONLY raw JSON:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'google/gemma-2-9b-it',
+        model: OPENROUTER_MODEL,
         messages: [
           { role: 'user', content: prompt }
         ]
