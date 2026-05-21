@@ -8,6 +8,7 @@ import { MarketAnalysis, Category } from './types';
 import { MarketCard } from './components/MarketCard';
 import { MarketDetailModal } from './components/MarketDetailModal';
 import { PremiumAccessModal } from './components/PremiumAccessModal';
+import { PatternRacePage } from './components/PatternRacePage';
 import { getPolymarketUrl } from './services/linkService';
 import { getMarketSignal } from './services/marketSignals';
 import { Activity, BarChart3, Filter, RefreshCw, Zap, Swords, Clock, AlertTriangle, HelpCircle, X, ExternalLink, Search, ArrowUpDown, TrendingUp, DollarSign, Target, Calendar, History, Flame, Crown, Sparkles, Bookmark, Droplets, Timer, GitBranch } from 'lucide-react';
@@ -49,6 +50,7 @@ const App: React.FC = () => {
   });
   const [dataSource, setDataSource] = useState<'daily' | 'hourly'>('daily');
   const [historicalFavorites, setHistoricalFavorites] = useState<MarketAnalysis[]>([]);
+  const [activePage, setActivePage] = useState<'markets' | 'patterns'>('markets');
 
   // Fetch favorited markets from history when favorites change
   useEffect(() => {
@@ -406,6 +408,19 @@ const App: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  setActivePage(activePage === 'patterns' ? 'markets' : 'patterns');
+                  trackPageView(activePage === 'patterns' ? 'Home' : 'Pattern Race');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${activePage === 'patterns'
+                  ? 'bg-sky-500/10 text-sky-300 border border-sky-500/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+              >
+                <GitBranch size={16} />
+                <span className="hidden sm:inline">Patterns</span>
+              </button>
+              <button
+                onClick={() => {
                   setShowHistory(true);
                   // Focus on accuracy tab
                   // Note: Since state is internal, we'll add a prop to PredictionHistory for initial tab
@@ -439,10 +454,21 @@ const App: React.FC = () => {
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            Crowd Wisdom <span className="text-slate-500 text-2xl">vs</span> Swarm AI <span className="text-xs text-slate-600 ml-2 font-normal border border-slate-700 rounded px-1.5 py-0.5">v1.1.0</span>
+            {activePage === 'patterns' ? (
+              <>
+                Pattern Race <span className="text-slate-500 text-2xl">HTT</span> vs <span className="text-slate-500 text-2xl">TTH</span>
+              </>
+            ) : (
+              <>
+                Crowd Wisdom <span className="text-slate-500 text-2xl">vs</span> Swarm AI
+              </>
+            )}
+            <span className="text-xs text-slate-600 ml-2 font-normal border border-slate-700 rounded px-1.5 py-0.5">v1.1.0</span>
           </h1>
           <p className="text-slate-400 text-lg max-w-2xl">
-            Detect arbitrage opportunities where AI disagrees with the Polymarket prediction market.
+            {activePage === 'patterns'
+              ? 'Exploit sequence-overlap bias by finding picks where alpha appears before the crowd reprices.'
+              : 'Detect arbitrage opportunities where AI disagrees with the Polymarket prediction market.'}
           </p>
         </div>
 
@@ -507,28 +533,38 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-          <input
-            type="text"
-            placeholder="Search markets..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+        {activePage === 'patterns' ? (
+          <PatternRacePage
+            markets={activeMarkets}
+            timestamp={activeTimestamp}
+            stale={activeStale}
+            onMarketClick={handleMarketSelect}
+            onBet={handleBetClick}
           />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-            >
-              <X size={18} />
-            </button>
-          )}
-        </div>
+        ) : (
+          <>
+            {/* Search Bar */}
+            <div className="relative mb-4">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+              <input
+                type="text"
+                placeholder="Search markets..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
 
-        {/* Dashboard Controls */}
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-8 space-y-4">
+            {/* Dashboard Controls */}
+            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-8 space-y-4">
 
           <div className="flex flex-col xl:flex-row gap-4 justify-between">
 
@@ -635,58 +671,60 @@ const App: React.FC = () => {
 
           </div>
 
-        </div>
-
-        {/* Grid or Error */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-80 bg-slate-800 rounded-xl border border-slate-700/50"></div>
-            ))}
-          </div>
-        ) : error && activeMarkets.length === 0 ? (
-          <div className="col-span-full text-center py-20 flex flex-col items-center bg-slate-900/30 rounded-xl border border-red-900/30">
-            <div className="bg-red-500/10 p-4 rounded-full mb-4">
-              <AlertTriangle size={48} className="text-red-500" />
             </div>
-            <h3 className="text-xl font-bold text-red-400 mb-2">Service Unavailable</h3>
-            <p className="text-slate-400 max-w-md mx-auto mb-6">
-              {error}
-            </p>
-            <button
-              onClick={loadData}
-              className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors font-medium border border-slate-700"
-            >
-              Try Again
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMarkets.length > 0 ? (
-              filteredMarkets.map((market) => (
-                <MarketCard
-                  key={market.id}
-                  market={market}
-                  onAnalyze={handleMarketSelect}
-                  onBet={handleBetClick}
-                  onFavoriteToggle={(id, isFav) => {
-                    setFavorites(prev => isFav ? [...prev, id] : prev.filter(f => f !== id));
-                  }}
-                />
-              ))
+
+            {/* Grid or Error */}
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="h-80 bg-slate-800 rounded-xl border border-slate-700/50"></div>
+                ))}
+              </div>
+            ) : error && activeMarkets.length === 0 ? (
+              <div className="col-span-full text-center py-20 flex flex-col items-center bg-slate-900/30 rounded-xl border border-red-900/30">
+                <div className="bg-red-500/10 p-4 rounded-full mb-4">
+                  <AlertTriangle size={48} className="text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-red-400 mb-2">Service Unavailable</h3>
+                <p className="text-slate-400 max-w-md mx-auto mb-6">
+                  {error}
+                </p>
+                <button
+                  onClick={loadData}
+                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors font-medium border border-slate-700"
+                >
+                  Try Again
+                </button>
+              </div>
             ) : (
-              <div className="col-span-full text-center py-20 text-slate-500 flex flex-col items-center">
-                <BarChart3 size={48} className="mb-4 opacity-50" />
-                <p className="text-lg">{activeMarkets.length === 0 ? 'No cached market picks are available yet.' : 'No markets found matching your filters.'}</p>
-                {activeMarkets.length === 0 && (
-                  <p className="text-sm text-slate-600 mt-2">The backend cache is warming up. Try again shortly.</p>
-                )}
-                {showContrarian && (
-                  <p className="text-sm text-slate-600 mt-2">No positive edge clears the actionability threshold for this filter set.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredMarkets.length > 0 ? (
+                  filteredMarkets.map((market) => (
+                    <MarketCard
+                      key={market.id}
+                      market={market}
+                      onAnalyze={handleMarketSelect}
+                      onBet={handleBetClick}
+                      onFavoriteToggle={(id, isFav) => {
+                        setFavorites(prev => isFav ? [...prev, id] : prev.filter(f => f !== id));
+                      }}
+                    />
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-20 text-slate-500 flex flex-col items-center">
+                    <BarChart3 size={48} className="mb-4 opacity-50" />
+                    <p className="text-lg">{activeMarkets.length === 0 ? 'No cached market picks are available yet.' : 'No markets found matching your filters.'}</p>
+                    {activeMarkets.length === 0 && (
+                      <p className="text-sm text-slate-600 mt-2">The backend cache is warming up. Try again shortly.</p>
+                    )}
+                    {showContrarian && (
+                      <p className="text-sm text-slate-600 mt-2">No positive edge clears the actionability threshold for this filter set.</p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
-          </div>
+          </>
         )}
 
         <PredictionHistory
