@@ -976,8 +976,12 @@ async function resolvePendingMarkets() {
     const predictions = data.predictions || [];
     let hasUpdates = false;
 
-    // Filter only pending items to avoid re-checking everything
-    const pendingItems = predictions.filter(p => p.outcome === 'pending');
+    // Filter pending items, plus already-resolved "Other" picks so older records
+    // created before the grouped-market fix can be repaired in place.
+    const pendingItems = predictions.filter(p =>
+      p.outcome === 'pending' ||
+      (p.aiPrediction?.trim().toLowerCase() === 'other' && p.resolvedOutcome)
+    );
 
     if (pendingItems.length === 0) continue;
 
@@ -1027,12 +1031,21 @@ async function resolvePendingMarkets() {
           if (winnerIndex !== -1) {
             const winningOutcome = outcomes[winnerIndex];
 
-            // Normalize strings for comparison
+            // Normalize strings for comparison. For grouped markets we store outcomes as
+            // [specific selection, "Other"], while Polymarket may resolve to "No" or a
+            // concrete alternate winner. In that case "Other" wins whenever outcome[0]
+            // did not win.
             const cleanPrediction = item.aiPrediction?.trim().toLowerCase();
             const cleanWinner = winningOutcome?.trim().toLowerCase();
+            const cleanOutcomeA = outcomes[0]?.trim().toLowerCase();
+            const isWin = cleanPrediction === 'other'
+              ? cleanWinner !== cleanOutcomeA
+              : cleanPrediction === cleanWinner;
+
+            const previousOutcome = item.outcome;
+            const previousResolvedOutcome = item.resolvedOutcome;
 
             // Update Item
-            const isWin = cleanPrediction === cleanWinner;
             item.outcome = isWin ? 'win' : 'loss';
             item.resolvedAt = new Date().toISOString();
             item.resolvedOutcome = winningOutcome;
@@ -1060,9 +1073,15 @@ async function resolvePendingMarkets() {
               item.roi = -1.0;
             }
 
-            hasUpdates = true;
-            resolvedCount++;
-            console.log(`Resolved ${item.title}: ${item.outcome} (Winner: ${winningOutcome})`);
+            if (
+              previousOutcome !== item.outcome ||
+              previousResolvedOutcome !== item.resolvedOutcome ||
+              previousOutcome === 'pending'
+            ) {
+              hasUpdates = true;
+              resolvedCount++;
+              console.log(`Resolved ${item.title}: ${item.outcome} (Winner: ${winningOutcome})`);
+            }
           }
         }
       } catch (err) {
@@ -1080,13 +1099,15 @@ async function resolvePendingMarkets() {
       const totalRoi = resolvedPreds.reduce((sum, p) => sum + (p.roi || 0), 0);
       const avgRoi = total > 0 ? (totalRoi / total) : 0;
 
-      // Brier Score = (Prob - Outcome)^2
-      // Win=1, Loss=0.
-      // If Win: (AI_Prob - 1)^2
-      // If Loss: (AI_Prob - 0)^2
+      // Brier Score = (predicted outcome probability - actual outcome)^2.
+      // aiProb is stored for outcomes[0], so invert it when the pick was outcomes[1]/Other.
       const brierSum = resolvedPreds.reduce((sum, p) => {
+        const storedOutcomes = Array.isArray(p.outcomes) && p.outcomes.length >= 2 ? p.outcomes : ['Yes', 'No'];
+        const cleanPrediction = p.aiPrediction?.trim().toLowerCase();
+        const cleanOutcomeA = storedOutcomes[0]?.trim().toLowerCase();
+        const predictedProb = cleanPrediction === cleanOutcomeA ? p.aiProb : 1 - p.aiProb;
         const outcomeVal = p.outcome === 'win' ? 1 : 0;
-        return sum + Math.pow(p.aiProb - outcomeVal, 2);
+        return sum + Math.pow(predictedProb - outcomeVal, 2);
       }, 0);
       const brierScore = total > 0 ? (brierSum / total) : 0;
 
