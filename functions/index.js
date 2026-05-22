@@ -89,13 +89,24 @@ function parseModelJson(text) {
     throw new Error('Empty model response');
   }
   const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const parseJson = (candidate) => {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      const repaired = candidate
+        .replace(/"kellyPercentage"\s*:\s*[^,\n}]+/g, '"kellyPercentage": 0')
+        .replace(/"confidence"\s*:\s*[^,\n}]+/g, '"confidence": 5');
+      return JSON.parse(repaired);
+    }
+  };
+
   try {
-    return JSON.parse(cleaned);
+    return parseJson(cleaned);
   } catch {
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1));
+      return parseJson(cleaned.slice(start, end + 1));
     }
     throw new Error('Model response was not valid JSON');
   }
@@ -341,14 +352,18 @@ Protocol
 4) Tail calibration: if the market is already below 8% or above 92%, do NOT force it back to 8/92; probabilities of 1-5% or 95-99% are allowed when base rates justify them.
 5) Output aiProbability for "${outcomeA}" and make the reasoning explain the alpha direction: buy "${outcomeA}", buy "${outcomeB}", or no trade.
 
-Return ONLY raw JSON:
-- aiProbability: number 0-1 (calibrated)
-- prediction: "${outcomeA}" or "${outcomeB}"
-- reasoning: 2 sentences max
-- category: Politics | Crypto | Sports | Business | Other
-- kellyPercentage: 0-100 (keep it low for safety)
-- confidence: 1-10
-- riskFactor: main risk`;
+Return ONLY one strict JSON object. No markdown, no comments, no extra text.
+All numeric fields must be JSON numbers using digits only.
+Schema:
+{
+  "aiProbability": 0.42,
+  "prediction": "${outcomeA}",
+  "reasoning": "Two concise sentences max.",
+  "category": "Politics",
+  "kellyPercentage": 0,
+  "confidence": 5,
+  "riskFactor": "Main risk"
+}`;
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -361,6 +376,10 @@ Return ONLY raw JSON:
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 500,
+      response_format: { type: 'json_object' },
+      ...(model.includes('deepseek') ? { reasoning: { enabled: false } } : {})
     })
   });
 
@@ -589,7 +608,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
           reviewCount++;
         } catch (reviewError) {
           reviewFallbackCount++;
-          console.warn(`Grok review failed for ${event.title}, keeping cheap analysis:`, reviewError.message);
+          console.warn(`${OPENROUTER_REVIEW_MODEL} review failed for ${event.title}, keeping cheap analysis:`, reviewError.message);
         }
       }
 
