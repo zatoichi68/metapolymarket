@@ -664,7 +664,7 @@ async function fetchAndAnalyzeMarkets(apiKey) {
     await sleep(PER_CALL_DELAY_MS);
   }
 
-  console.log(`Analysis complete: ${successCount} success, ${errorCount} errors, ${cheapCount} cheap passes, ${reviewCount} Grok reviews, ${reviewFallbackCount} review fallbacks`);
+  console.log(`Analysis complete: ${successCount} success, ${errorCount} errors, ${cheapCount} cheap passes, ${reviewCount} ${OPENROUTER_REVIEW_MODEL} reviews, ${reviewFallbackCount} review fallbacks`);
   return analyzedMarkets;
 }
 
