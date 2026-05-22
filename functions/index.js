@@ -17,7 +17,7 @@ const smtpFrom = defineSecret('SMTP_FROM');
 const smtpFromName = defineSecret('SMTP_FROM_NAME');
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'x-ai/grok-4.3';
 const OPENROUTER_CHEAP_MODEL = process.env.OPENROUTER_CHEAP_MODEL || 'google/gemini-2.5-flash-lite';
-const OPENROUTER_REVIEW_MODEL = process.env.OPENROUTER_REVIEW_MODEL || OPENROUTER_MODEL;
+const OPENROUTER_REVIEW_MODEL = process.env.OPENROUTER_REVIEW_MODEL || 'deepseek/deepseek-v3.2';
 
 // CORS Configuration - Restrict to allowed origins
 const ALLOWED_ORIGINS = [
